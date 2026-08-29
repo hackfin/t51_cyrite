@@ -7,7 +7,8 @@ from cyrite.auxiliaries.xhdl import vhdlaux as vh
 import cyhdl_work as work
 
 # Imports for 't51':
-from t51_pack import *
+from t51_pack import t51_alu
+from cyhdl_work.types import *
 
 SLV8 = Signal.Type(vh.std_logic_vector, 8)
 

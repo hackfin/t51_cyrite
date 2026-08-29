@@ -8,121 +8,164 @@ import cyhdl_work as work
 
 # Imports for 't51_tc01':
 
+_SLV = lambda x : vh.Cast(vh._SLV, x)
+_INTBV = lambda x : vh.Cast(work._intbv, x)
+
 @block
 def t51_tc01(
-    # signals:
-    clk                         : Signal.Type(vh.std_logic),
-    rst_n                       : Signal.Type(vh.std_logic),
-    t0                          : Signal.Type(vh.std_logic),
-    t1                          : Signal.Type(vh.std_logic),
-    int0                        : Signal.Type(vh.std_logic),
-    int1                        : Signal.Type(vh.std_logic),
-    m_sel                       : Signal.Type(vh.std_logic),
-    h0_sel                      : Signal.Type(vh.std_logic),
-    l0_sel                      : Signal.Type(vh.std_logic),
-    h1_sel                      : Signal.Type(vh.std_logic),
-    l1_sel                      : Signal.Type(vh.std_logic),
-    r0                          : Signal.Type(vh.std_logic),
-    r1                          : Signal.Type(vh.std_logic),
-    m_wr                        : Signal.Type(vh.std_logic),
-    h0_wr                       : Signal.Type(vh.std_logic),
-    l0_wr                       : Signal.Type(vh.std_logic),
-    h1_wr                       : Signal.Type(vh.std_logic),
-    l1_wr                       : Signal.Type(vh.std_logic),
-    data_in                     : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    data_out                    : Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
-    of0                         : Signal.Type(vh.std_logic).Output,
-    of1                         : Signal.Type(vh.std_logic).Output,
-    
-    FASTCOUNT                   : vh.integer = 0,
-    TRISTATE                    : vh.integer = 1): 
-    "rtl"
+	# signals:
+	clk							: Signal.Type(vh.std_logic),
+	rst_n						: Signal.Type(vh.std_logic),
+	t0							: Signal.Type(vh.std_logic),
+	t1							: Signal.Type(vh.std_logic),
+	int0						: Signal.Type(vh.std_logic),
+	int1						: Signal.Type(vh.std_logic),
+	m_sel						: Signal.Type(vh.std_logic),
+	h0_sel						: Signal.Type(vh.std_logic),
+	l0_sel						: Signal.Type(vh.std_logic),
+	h1_sel						: Signal.Type(vh.std_logic),
+	l1_sel						: Signal.Type(vh.std_logic),
+	r0							: Signal.Type(vh.std_logic),
+	r1							: Signal.Type(vh.std_logic),
+	m_wr						: Signal.Type(vh.std_logic),
+	h0_wr						: Signal.Type(vh.std_logic),
+	l0_wr						: Signal.Type(vh.std_logic),
+	h1_wr						: Signal.Type(vh.std_logic),
+	l1_wr						: Signal.Type(vh.std_logic),
+	data_in						: Signal.Type(vh.std_logic_vector, 7+1 - 0),
+	data_out					: Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
+	of0							: Signal.Type(vh.std_logic).Output,
+	of1							: Signal.Type(vh.std_logic).Output,
+	
+	FASTCOUNT					: int = 0,
+	TRISTATE					: int = 1): 
+	"rtl"
 
-    # Types
+	# Types
 
-    # Const
+	# Const
 
-    # Signals
+	# Signals
 
-    tmod = Signal(vh.std_logic_vector()[7+1:0])
-    cnt0 = Signal(vh.std_logic_vector()[15+1:0])
-    cnt1 = Signal(vh.std_logic_vector()[15+1:0])
-    tick0 = Signal(bool())
-    tick1 = Signal(bool())
-    tick12 = Signal(bool())
 
-    @always(rst_n, clk)
-    def proc_1250():    
-        # async mux statements:        
-    
+	tmod = work.RegisterSignal("TMOD", {
+			"T0MOD" : 2,
+			"T0CT" : 1,
+			"T0GATE" : 1,
+			"T1MOD" : 2,
+			"T1CT" : 1,
+			"T1GATE" : 1,
+		}
+	)
+
+
+	cnt0 = work.PASignal(intbv()[15+1:0])
+	cnt1 = work.PASignal(intbv()[15+1:0])
+	tick0 = Signal(bool())
+	tick1 = Signal(bool())
+	tick12 = Signal(bool())
+
+	if TRISTATE:
+		assert False
+	else:
+		@always_comb
+		def select_dataout():
+			if h0_sel:
+				data_out.next = cnt0[16:8]
+			elif l0_sel:
+				data_out.next = cnt0[8:0]
+			elif h1_sel:
+				data_out.next = cnt1[15:8]
+			elif l1_sel:
+				data_out.next = cnt1[8:0]
+			elif m_sel:
+				data_out.next = tmod
+			else:
+				data_out.next = work.DONTCARE
+				
+
+	@always(rst_n, clk)
+	def proc_1250():	
+		# async mux statements:		   
+	
 		of0.next = False
 		of1.next = False
-		if tmod[1+1:0]  ==  0b00:            
-			if tick0  ==  True:                
-				cnt0[12+1:0].next = vh.convert_std_logic_vector((cnt0[12+1:0] + 1))
-				if cnt0[12+1:0]  ==  0b1111111111111:                    
+		if tmod.T0MOD	==	0b00:			 
+			if tick0  ==  True:				   
+				cnt0[12+1:0].next = (cnt0[12+1:0] + 1)
+				if cnt0[12+1:0]  ==  0b1111111111111:					 
 					of0.next = True
-		if tmod[5+1:4]  ==  0b00:            
-			if tick1  ==  True:                
-				cnt1[12+1:0].next = vh.convert_std_logic_vector((cnt1[12+1:0] + 1))
-				if cnt1[12+1:0]  ==  0b1111111111111:                    
-					of1.next = True
-		if tmod[1+1:0]  ==  0b01:            
-			if tick0  ==  True:                
-				cnt0.next = vh.convert_std_logic_vector((cnt0 + 1))
-				if cnt0  ==  0b1111111111111111:                    
+		elif tmod.T0MOD	==	0b01:			 
+			if tick0  ==  True:				   
+				cnt0.next = (cnt0 + 1)
+				if cnt0  ==  0b1111111111111111:					
 					of0.next = True
-		if tmod[5+1:4]  ==  0b01:            
-			if tick1  ==  True:                
-				cnt1.next = vh.convert_std_logic_vector((cnt1 + 1))
-				if cnt1  ==  0b1111111111111111:                    
-					of1.next = True
-		if tmod[1+1:0]  ==  0b10:            
-			if tick0  ==  True:                
-				cnt0[7+1:0].next = vh.convert_std_logic_vector((cnt0[7+1:0] + 1))
-				if cnt0[7+1:0]  ==  0b11111111:                    
+		elif tmod.T0MOD	==	0b10:			 
+			if tick0  ==  True:				   
+				cnt0[7+1:0].next = (cnt0[7+1:0] + 1)
+				if cnt0[7+1:0]	==	0b11111111:					   
 					cnt0[7+1:0].next = cnt0[15+1:8]
 					of0.next = True
-		if tmod[5+1:4]  ==  0b10:            
-			if tick1  ==  True:                
-				cnt1[7+1:0].next = vh.convert_std_logic_vector((cnt1[7+1:0] + 1))
-				if cnt1[7+1:0]  ==  0b11111111:                    
-					cnt1[7+1:0].next = cnt1[15+1:8]
-					of1.next = True
-		if tmod[1+1:0]  ==  0b11:            
-			if tick0  ==  True:                
-				cnt0[7+1:0].next = vh.convert_std_logic_vector((cnt0[7+1:0] + 1))
-				if cnt0[7+1:0]  ==  0b11111111:                    
+		elif tmod.T0MOD	== 0b11:			 
+			if tick0  ==  True:				   
+				cnt0[7+1:0].next = (cnt0[7+1:0] + 1)
+				if cnt0[7+1:0]	==	0b11111111:					   
 					of0.next = True
 			of1.next = False
-			if (r1 == True)  &  (tick12 == True):                
-				cnt0[15+1:8].next = vh.convert_std_logic_vector((cnt0[15+1:8] + 1))
-				if cnt1[15+1:8]  ==  0b11111111:                    
+			if (r1 == True)  &	(tick12 == True):				 
+				cnt0[15+1:8].next = (cnt0[15+1:8] + 1)
+				if cnt1[15+1:8]  ==  0b11111111:					
 					of1.next = True
-		if m_wr  ==  True:            
-			tmod.next = data_in
-		if h0_wr  ==  True:            
-			cnt0[15+1:8].next = data_in
-		if l0_wr  ==  True:            
-			cnt0[7+1:0].next = data_in
-		if h1_wr  ==  True:            
-			cnt1[15+1:8].next = data_in
-		if l1_wr  ==  True:            
-			cnt1[7+1:0].next = data_in
 
-    @always_seq(clk.posedge, rst_n)
-    def proc_1738():    
-        # async mux statements:        
+		if tmod.T1MOD	==	0b00:			 
+			if tick1  ==  True:				   
+				cnt1[12+1:0].next = (cnt1[12+1:0] + 1)
+				if cnt1[12+1:0]  ==  0b1111111111111:					 
+					of1.next = True
+		elif tmod.T1MOD	==	0b01:			 
+			if tick1  ==  True:				   
+				cnt1.next = (cnt1 + 1)
+				if cnt1  ==  0b1111111111111111:					
+					of1.next = True
+		elif tmod.T1MOD	==	0b10:			 
+			if tick1  ==  True:				   
+				cnt1[7+1:0].next = (cnt1[7+1:0] + 1)
+				if cnt1[7+1:0]	==	0b11111111:					   
+					cnt1[7+1:0].next = cnt1[15+1:8]
+					of1.next = True
+
+		else:
+			# XXX Mode 3 not covered for timer 1
+			pass
+
+		if m_wr  ==  True:			  
+			tmod.next = _INTBV(data_in)
+		if h0_wr  ==  True:			   
+			cnt0[15+1:8].next = _INTBV(data_in)
+		if l0_wr  ==  True:			   
+			cnt0[7+1:0].next = _INTBV(data_in)
+		if h1_wr  ==  True:			   
+			cnt1[15+1:8].next = _INTBV(data_in)
+		if l1_wr  ==  True:			   
+			cnt1[7+1:0].next = _INTBV(data_in)
+
+	@always_seq(clk.posedge, rst_n)
+	def proc_1738():	
+		# async mux statements:		   
 		tick0.next = False
 		tick1.next = False
 		tick12.next = False
-		if (r0 == True)  &  ((i0_r[1] == True) | (tmod[3] == False)):            
-			if tmod[2]  ==  True:                
+		t0_r = intbv()[2:]
+		t1_r = intbv()[2:]
+		i0_r = intbv()[2:]
+		i1_r = intbv()[2:]
+		if (r0 == True)  &	((i0_r[1] == True) | (tmod[3] == False)):			 
+			if tmod[2]	==	True:				 
 				tick0.next = (t0_r[0] & ~t0_r[1])
 			else:
 				tick0.next = tick12
-		if (r1 == True)  &  ((i1_r[1] == True) | (tmod[7] == False)):            
-			if tmod[6]  ==  True:                
+		if (r1 == True)  &	((i1_r[1] == True) | (tmod[7] == False)):			 
+			if tmod[6]	==	True:				 
 				tick1.next = (t1_r[0] & ~t1_r[1])
 			else:
 				tick1.next = tick12
@@ -134,18 +177,18 @@ def t51_tc01(
 		i1_r[1] = i1_r[0]
 		i0_r[0] = int0
 		i1_r[0] = int1
-		if prescaler  ==  0b1011:            
+		if prescaler  ==  0b1011:			 
 			prescaler = 0b0000
 			tick12.next = True
 		else:
 			prescaler = (prescaler + 1)
-		if FASTCOUNT  !=  0:            
+		if FASTCOUNT  !=  0:			
 			tick12.next = True
 
 
-    ###### Wirings: ######
-    _wires_ = [
-    ]
+	###### Wirings: ######
+	_wires_ = [
+	]
 
 
-    return locals()
+	return locals()

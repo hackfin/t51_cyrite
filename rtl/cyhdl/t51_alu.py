@@ -107,257 +107,143 @@ def t51_alu(
     div_q = Signal(vh.std_logic_vector()[15+1:0])
     div_ov = Signal(bool())
 
-    @always(clk)
-    def proc_1304():    
-        if EVENT(clk)  &  (clk == True):        
-            do_a_imm.next = False
-            do_a_carry.next = False
-            do_a_rr.next = False
-            do_a_inc.next = False
-            do_a_rrc.next = False
-            do_a_dec.next = False
-            do_a_rl.next = False
-            do_a_add.next = False
-            do_a_rlc.next = False
-            do_a_orl.next = False
-            do_a_anl.next = False
-            do_a_xrl.next = False
-            do_a_mov.next = False
-            do_a_div.next = False
-            do_a_subb.next = False
-            do_a_mul.next = False
-            do_a_cjne.next = False
-            do_a_swap.next = False
-            do_a_xch.next = False
-            do_a_da.next = False
-            do_a_xchd.next = False
-            do_a_clr.next = False
-            do_a_cpl.next = False
-            do_a_imm.next = False
-            if opcode[3+1:0]  ==  0b0100:            
-                do_a_imm.next = True
-            if opcode  ==  0b00000011:            
-                do_a_rr.next = True
-            if opcode  ==  0b00000100:            
-                do_a_inc.next = True
-            if opcode  ==  0b00010011:            
-                do_a_rrc.next = True
-            if opcode  ==  0b00010100:            
-                do_a_dec.next = True
-            if opcode  ==  0b00100011:            
-                do_a_rl.next = True
-            if (((opcode == 0b00100100) | (opcode == 0b00100101)) | (opcode[7+1:1] == 0b0010011))  |  (opcode[7+1:3] == 0b00101):            
-                do_a_add.next = True
-            if opcode  ==  0b00110011:            
-                do_a_rlc.next = True
-            if (((opcode == 0b00110100) | (opcode == 0b00110101)) | (opcode[7+1:1] == 0b0011011))  |  (opcode[7+1:3] == 0b00111):            
-                do_a_add.next = True
-                do_a_carry.next = True
-            if (((opcode == 0b01000100) | (opcode == 0b01000101)) | (opcode[7+1:1] == 0b0100011))  |  (opcode[7+1:3] == 0b01001):            
-                do_a_orl.next = True
-            if (((opcode == 0b01010100) | (opcode == 0b01010101)) | (opcode[7+1:1] == 0b0101011))  |  (opcode[7+1:3] == 0b01011):            
-                do_a_anl.next = True
-            if (((opcode == 0b01100100) | (opcode == 0b01100101)) | (opcode[7+1:1] == 0b0110011))  |  (opcode[7+1:3] == 0b01101):            
-                do_a_xrl.next = True
-            if (((opcode == 0b01110100) | (opcode == 0b11100101)) | (opcode[7+1:1] == 0b1110011))  |  (opcode[7+1:3] == 0b11101):            
-                do_a_mov.next = True
-            if opcode  ==  0b10000100:            
-                do_a_div.next = True
-            if (((opcode == 0b10010100) | (opcode == 0b10010101)) | (opcode[7+1:1] == 0b1001011))  |  (opcode[7+1:3] == 0b10011):            
-                do_a_subb.next = True
-                do_a_carry.next = True
-            if opcode  ==  0b10100100:            
-                do_a_mul.next = True
-            if opcode[7+1:1]  ==  0b1011010:            
-                do_a_subb.next = True
-                do_a_cjne.next = True
-            if opcode  ==  0b11000100:            
-                do_a_swap.next = True
-            if ((opcode == 0b11000101) | (opcode[7+1:1] == 0b1100011))  |  (opcode[7+1:3] == 0b11001):            
-                do_a_xch.next = True
-            if opcode  ==  0b11010100:            
-                do_a_da.next = True
-            if opcode[7+1:1]  ==  0b1101011:            
-                do_a_xchd.next = True
-            if opcode  ==  0b11100100:            
-                do_a_clr.next = True
-            if opcode  ==  0b11110100:            
-                do_a_cpl.next = True
-            do_i_imm.next = False
-            do_i_inc.next = False
-            do_i_dec.next = False
-            do_i_orl.next = False
-            do_i_anl.next = False
-            do_i_xrl.next = False
-            do_i_mov.next = False
-            do_i_movd.next = False
-            do_i_cjne.next = False
-            ia_d.next = ia
-            mov_op.next = opcode[7+1:4]
-            if opcode[3+1:0]  ==  0b0011:            
-                do_i_imm.next = True
-            if ((opcode == 0b00000101) | (opcode[7+1:1] == 0b0000011))  |  (opcode[7+1:3] == 0b00001):            
-                do_i_inc.next = True
-            if ((((opcode == 0b00010101) | (opcode[7+1:1] == 0b0001011)) | (opcode[7+1:3] == 0b00011)) | (opcode[7+1:3] == 0b11011))  |  (opcode == 0b11010101):            
-                do_i_dec.next = True
-            if opcode[7+1:1]  ==  0b0100001:            
-                do_i_orl.next = True
-            if opcode[7+1:1]  ==  0b0101001:            
-                do_i_anl.next = True
-            if opcode[7+1:1]  ==  0b0110001:            
-                do_i_xrl.next = True
-            if (((((((((((((opcode == 0b01110101) | (opcode[7+1:1] == 0b0111011)) | (opcode[7+1:3] == 0b01111)) | (opcode[7+1:1] == 0b1000011)) | (opcode[7+1:3] == 0b10001)) | (opcode == 0b10010000)) | (opcode[7+1:1] == 0b1010011)) | (opcode[7+1:3] == 0b10101)) | (opcode == 0b11110000)) | (opcode[7+1:1] == 0b1111001)) | (opcode == 0b11110101)) | (opcode[7+1:1] == 0b1111011)) | (opcode[7+1:3] == 0b11111))  |  ((opcode[7+1:5] == 0b110) & (opcode[3+1:0] == 0b0000)):            
-                do_i_mov.next = True
-            if opcode  ==  0b10000101:            
-                do_i_movd.next = True
-            if (opcode[7+1:1] == 0b1011011)  |  (opcode[7+1:3] == 0b10111):            
-                do_i_cjne.next = True
-            do_b_inv.next = False
-            do_b_c_ba.next = False
-            do_b_c_dir.next = False
-            do_b_ba_dir.next = False
-            do_b_mov.next = False
-            do_b_jbc.next = False
-            do_b_op.next = opcode[5+1:4]
-            if opcode[1+1:0]  ==  0b00:            
-                do_b_inv.next = True
-            if ((((opcode == 0b01110010) | (opcode == 0b10000010)) | (opcode == 0b10100000)) | (opcode == 0b10100010))  |  (opcode == 0b10110000):            
-                do_b_c_ba.next = True
-            if ((opcode == 0b10110011) | (opcode == 0b11000011))  |  (opcode == 0b11010011):            
-                do_b_c_dir.next = True
-            if ((opcode == 0b10110010) | (opcode == 0b11000010))  |  (opcode == 0b11010010):            
-                do_b_ba_dir.next = True
-            if opcode  ==  0b10010010:            
-                do_b_mov.next = True
-            if opcode  ==  0b00010000:            
-                do_b_jbc.next = True
-            last_r.next = last
-        # combined statements:        
-        do_a_imm.next = False
-        do_a_carry.next = False
-        do_a_rr.next = False
-        do_a_inc.next = False
-        do_a_rrc.next = False
-        do_a_dec.next = False
-        do_a_rl.next = False
-        do_a_add.next = False
-        do_a_rlc.next = False
-        do_a_orl.next = False
-        do_a_anl.next = False
-        do_a_xrl.next = False
-        do_a_mov.next = False
-        do_a_div.next = False
-        do_a_subb.next = False
-        do_a_mul.next = False
-        do_a_cjne.next = False
-        do_a_swap.next = False
-        do_a_xch.next = False
-        do_a_da.next = False
-        do_a_xchd.next = False
-        do_a_clr.next = False
-        do_a_cpl.next = False
-        do_a_imm.next = False
-        if opcode[3+1:0]  ==  0b0100:        
-            do_a_imm.next = True
-        if opcode  ==  0b00000011:        
-            do_a_rr.next = True
-        if opcode  ==  0b00000100:        
-            do_a_inc.next = True
-        if opcode  ==  0b00010011:        
-            do_a_rrc.next = True
-        if opcode  ==  0b00010100:        
-            do_a_dec.next = True
-        if opcode  ==  0b00100011:        
-            do_a_rl.next = True
-        if (((opcode == 0b00100100) | (opcode == 0b00100101)) | (opcode[7+1:1] == 0b0010011))  |  (opcode[7+1:3] == 0b00101):        
-            do_a_add.next = True
-        if opcode  ==  0b00110011:        
-            do_a_rlc.next = True
-        if (((opcode == 0b00110100) | (opcode == 0b00110101)) | (opcode[7+1:1] == 0b0011011))  |  (opcode[7+1:3] == 0b00111):        
-            do_a_add.next = True
-            do_a_carry.next = True
-        if (((opcode == 0b01000100) | (opcode == 0b01000101)) | (opcode[7+1:1] == 0b0100011))  |  (opcode[7+1:3] == 0b01001):        
-            do_a_orl.next = True
-        if (((opcode == 0b01010100) | (opcode == 0b01010101)) | (opcode[7+1:1] == 0b0101011))  |  (opcode[7+1:3] == 0b01011):        
-            do_a_anl.next = True
-        if (((opcode == 0b01100100) | (opcode == 0b01100101)) | (opcode[7+1:1] == 0b0110011))  |  (opcode[7+1:3] == 0b01101):        
-            do_a_xrl.next = True
-        if (((opcode == 0b01110100) | (opcode == 0b11100101)) | (opcode[7+1:1] == 0b1110011))  |  (opcode[7+1:3] == 0b11101):        
-            do_a_mov.next = True
-        if opcode  ==  0b10000100:        
-            do_a_div.next = True
-        if (((opcode == 0b10010100) | (opcode == 0b10010101)) | (opcode[7+1:1] == 0b1001011))  |  (opcode[7+1:3] == 0b10011):        
-            do_a_subb.next = True
-            do_a_carry.next = True
-        if opcode  ==  0b10100100:        
-            do_a_mul.next = True
-        if opcode[7+1:1]  ==  0b1011010:        
-            do_a_subb.next = True
-            do_a_cjne.next = True
-        if opcode  ==  0b11000100:        
-            do_a_swap.next = True
-        if ((opcode == 0b11000101) | (opcode[7+1:1] == 0b1100011))  |  (opcode[7+1:3] == 0b11001):        
-            do_a_xch.next = True
-        if opcode  ==  0b11010100:        
-            do_a_da.next = True
-        if opcode[7+1:1]  ==  0b1101011:        
-            do_a_xchd.next = True
-        if opcode  ==  0b11100100:        
-            do_a_clr.next = True
-        if opcode  ==  0b11110100:        
-            do_a_cpl.next = True
-        do_i_imm.next = False
-        do_i_inc.next = False
-        do_i_dec.next = False
-        do_i_orl.next = False
-        do_i_anl.next = False
-        do_i_xrl.next = False
-        do_i_mov.next = False
-        do_i_movd.next = False
-        do_i_cjne.next = False
-        ia_d.next = ia
-        mov_op.next = opcode[7+1:4]
-        if opcode[3+1:0]  ==  0b0011:        
-            do_i_imm.next = True
-        if ((opcode == 0b00000101) | (opcode[7+1:1] == 0b0000011))  |  (opcode[7+1:3] == 0b00001):        
-            do_i_inc.next = True
-        if ((((opcode == 0b00010101) | (opcode[7+1:1] == 0b0001011)) | (opcode[7+1:3] == 0b00011)) | (opcode[7+1:3] == 0b11011))  |  (opcode == 0b11010101):        
-            do_i_dec.next = True
-        if opcode[7+1:1]  ==  0b0100001:        
-            do_i_orl.next = True
-        if opcode[7+1:1]  ==  0b0101001:        
-            do_i_anl.next = True
-        if opcode[7+1:1]  ==  0b0110001:        
-            do_i_xrl.next = True
-        if (((((((((((((opcode == 0b01110101) | (opcode[7+1:1] == 0b0111011)) | (opcode[7+1:3] == 0b01111)) | (opcode[7+1:1] == 0b1000011)) | (opcode[7+1:3] == 0b10001)) | (opcode == 0b10010000)) | (opcode[7+1:1] == 0b1010011)) | (opcode[7+1:3] == 0b10101)) | (opcode == 0b11110000)) | (opcode[7+1:1] == 0b1111001)) | (opcode == 0b11110101)) | (opcode[7+1:1] == 0b1111011)) | (opcode[7+1:3] == 0b11111))  |  ((opcode[7+1:5] == 0b110) & (opcode[3+1:0] == 0b0000)):        
-            do_i_mov.next = True
-        if opcode  ==  0b10000101:        
-            do_i_movd.next = True
-        if (opcode[7+1:1] == 0b1011011)  |  (opcode[7+1:3] == 0b10111):        
-            do_i_cjne.next = True
-        do_b_inv.next = False
-        do_b_c_ba.next = False
-        do_b_c_dir.next = False
-        do_b_ba_dir.next = False
-        do_b_mov.next = False
-        do_b_jbc.next = False
-        do_b_op.next = opcode[5+1:4]
-        if opcode[1+1:0]  ==  0b00:        
-            do_b_inv.next = True
-        if ((((opcode == 0b01110010) | (opcode == 0b10000010)) | (opcode == 0b10100000)) | (opcode == 0b10100010))  |  (opcode == 0b10110000):        
-            do_b_c_ba.next = True
-        if ((opcode == 0b10110011) | (opcode == 0b11000011))  |  (opcode == 0b11010011):        
-            do_b_c_dir.next = True
-        if ((opcode == 0b10110010) | (opcode == 0b11000010))  |  (opcode == 0b11010010):        
-            do_b_ba_dir.next = True
-        if opcode  ==  0b10010010:        
-            do_b_mov.next = True
-        if opcode  ==  0b00010000:        
-            do_b_jbc.next = True
-        last_r.next = last
+    @always(clk.posedge)
+    def worker():    
+		do_a_imm.next = False
+		do_a_carry.next = False
+		do_a_rr.next = False
+		do_a_inc.next = False
+		do_a_rrc.next = False
+		do_a_dec.next = False
+		do_a_rl.next = False
+		do_a_add.next = False
+		do_a_rlc.next = False
+		do_a_orl.next = False
+		do_a_anl.next = False
+		do_a_xrl.next = False
+		do_a_mov.next = False
+		do_a_div.next = False
+		do_a_subb.next = False
+		do_a_mul.next = False
+		do_a_cjne.next = False
+		do_a_swap.next = False
+		do_a_xch.next = False
+		do_a_da.next = False
+		do_a_xchd.next = False
+		do_a_clr.next = False
+		do_a_cpl.next = False
+		do_a_imm.next = False
+		# This code might need some cleanups.
+		# Let the AI do it some time...
+		if opcode[3+1:0]  ==  0b0100:            
+			do_a_imm.next = True
+
+
+		if opcode  ==  0b00000011:            
+			do_a_rr.next = True
+		if opcode  ==  0b00000100:            
+			do_a_inc.next = True
+		if opcode  ==  0b00010011:            
+			do_a_rrc.next = True
+		if opcode  ==  0b00010100:            
+			do_a_dec.next = True
+		if opcode  ==  0b00100011:            
+			do_a_rl.next = True
+		if (((opcode == 0b00100100) | (opcode == 0b00100101)) | (opcode[7+1:1] == 0b0010011))  |  (opcode[7+1:3] == 0b00101):            
+			do_a_add.next = True
+		if opcode  ==  0b00110011:            
+			do_a_rlc.next = True
+		if (((opcode == 0b00110100) | (opcode == 0b00110101)) | (opcode[7+1:1] == 0b0011011))  |  (opcode[7+1:3] == 0b00111):            
+			do_a_add.next = True
+			do_a_carry.next = True
+		if (((opcode == 0b01000100) | (opcode == 0b01000101)) | (opcode[7+1:1] == 0b0100011))  |  (opcode[7+1:3] == 0b01001):            
+			do_a_orl.next = True
+		if (((opcode == 0b01010100) | (opcode == 0b01010101)) | (opcode[7+1:1] == 0b0101011))  |  (opcode[7+1:3] == 0b01011):            
+			do_a_anl.next = True
+		if (((opcode == 0b01100100) | (opcode == 0b01100101)) | (opcode[7+1:1] == 0b0110011))  |  (opcode[7+1:3] == 0b01101):            
+			do_a_xrl.next = True
+		if (((opcode == 0b01110100) | (opcode == 0b11100101)) | (opcode[7+1:1] == 0b1110011))  |  (opcode[7+1:3] == 0b11101):            
+			do_a_mov.next = True
+		if opcode  ==  0b10000100:            
+			do_a_div.next = True
+		if (((opcode == 0b10010100) | (opcode == 0b10010101)) | (opcode[7+1:1] == 0b1001011))  |  (opcode[7+1:3] == 0b10011):            
+			do_a_subb.next = True
+			do_a_carry.next = True
+		if opcode  ==  0b10100100:            
+			do_a_mul.next = True
+		if opcode[7+1:1]  ==  0b1011010:            
+			do_a_subb.next = True
+			do_a_cjne.next = True
+		if opcode  ==  0b11000100:            
+			do_a_swap.next = True
+		if ((opcode == 0b11000101) | (opcode[7+1:1] == 0b1100011))  |  (opcode[7+1:3] == 0b11001):            
+			do_a_xch.next = True
+		if opcode  ==  0b11010100:            
+			do_a_da.next = True
+		if opcode[7+1:1]  ==  0b1101011:            
+			do_a_xchd.next = True
+		if opcode  ==  0b11100100:            
+			do_a_clr.next = True
+		if opcode  ==  0b11110100:            
+			do_a_cpl.next = True
+		do_i_imm.next = False
+		do_i_inc.next = False
+		do_i_dec.next = False
+		do_i_orl.next = False
+		do_i_anl.next = False
+		do_i_xrl.next = False
+		do_i_mov.next = False
+		do_i_movd.next = False
+		do_i_cjne.next = False
+		ia_d.next = ia
+		mov_op.next = opcode[7+1:4]
+		if opcode[3+1:0]  ==  0b0011:            
+			do_i_imm.next = True
+		if ((opcode == 0b00000101) | (opcode[7+1:1] == 0b0000011))  |  (opcode[7+1:3] == 0b00001):            
+			do_i_inc.next = True
+		if ((((opcode == 0b00010101) | (opcode[7+1:1] == 0b0001011)) | (opcode[7+1:3] == 0b00011)) | (opcode[7+1:3] == 0b11011))  |  (opcode == 0b11010101):            
+			do_i_dec.next = True
+		if opcode[7+1:1]  ==  0b0100001:            
+			do_i_orl.next = True
+		if opcode[7+1:1]  ==  0b0101001:            
+			do_i_anl.next = True
+		if opcode[7+1:1]  ==  0b0110001:            
+			do_i_xrl.next = True
+		if (((((((((((((opcode == 0b01110101) | (opcode[7+1:1] == 0b0111011)) | (opcode[7+1:3] == 0b01111)) | (opcode[7+1:1] == 0b1000011)) | (opcode[7+1:3] == 0b10001)) | (opcode == 0b10010000)) | (opcode[7+1:1] == 0b1010011)) | (opcode[7+1:3] == 0b10101)) | (opcode == 0b11110000)) | (opcode[7+1:1] == 0b1111001)) | (opcode == 0b11110101)) | (opcode[7+1:1] == 0b1111011)) | (opcode[7+1:3] == 0b11111))  |  ((opcode[7+1:5] == 0b110) & (opcode[3+1:0] == 0b0000)):            
+			do_i_mov.next = True
+		if opcode  ==  0b10000101:            
+			do_i_movd.next = True
+		if (opcode[7+1:1] == 0b1011011)  |  (opcode[7+1:3] == 0b10111):            
+			do_i_cjne.next = True
+		do_b_inv.next = False
+		do_b_c_ba.next = False
+		do_b_c_dir.next = False
+		do_b_ba_dir.next = False
+		do_b_mov.next = False
+		do_b_jbc.next = False
+		do_b_op.next = opcode[5+1:4]
+		if opcode[1+1:0]  ==  0b00:            
+			do_b_inv.next = True
+		if ((((opcode == 0b01110010) | (opcode == 0b10000010)) | (opcode == 0b10100000)) | (opcode == 0b10100010))  |  (opcode == 0b10110000):            
+			do_b_c_ba.next = True
+		if ((opcode == 0b10110011) | (opcode == 0b11000011))  |  (opcode == 0b11010011):            
+			do_b_c_dir.next = True
+		if ((opcode == 0b10110010) | (opcode == 0b11000010))  |  (opcode == 0b11010010):            
+			do_b_ba_dir.next = True
+		if opcode  ==  0b10010010:            
+			do_b_mov.next = True
+		if opcode  ==  0b00010000:            
+			do_b_jbc.next = True
+		last_r.next = last
+
+	# TODO: AddSub translation
+	#
+
+	# TODO: Tristate MUX
+	#
 
     @always(ib, do_a_imm, ia)
-    def proc_7174():    
+    def select_aop2():    
         # ternary:        
         if do_a_imm  ==  True:        
             aop2.next = ib
@@ -365,7 +251,7 @@ def t51_alu(
             aop2.next = ia
 
     @always(ia)
-    def proc_7560():    
+    def select_djnz():    
         # ternary:        
         if vh.convert_std_logic_vector((ia - 1))  !=  0b00000000:        
             djnz.next = True
@@ -373,7 +259,7 @@ def t51_alu(
             djnz.next = False
 
     @always(acc, cy_in, ac_in)
-    def da():    
+    def daa():    
         # async mux statements:        
         accu = concat(False, acc)
         add = 0
@@ -386,7 +272,7 @@ def t51_alu(
         ada[8].next = (accu[8] | cy_in)
 
     @always(ib, do_i_imm, acc)
-    def proc_7566():    
+    def select_iop():    
         # ternary:        
         if do_i_imm  ==  True:        
             iop.next = ib

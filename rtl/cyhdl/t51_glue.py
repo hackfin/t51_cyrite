@@ -6,8 +6,12 @@ from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 import cyhdl_work as work
 
+_INTBV = lambda x : vh.Cast(work._intbv, x)
+
 # Imports for 't51_glue':
 from t51_pack import *
+
+DONTCARE = work.DONTCARE
 
 @block
 def t51_glue(
@@ -65,7 +69,7 @@ def t51_glue(
 	sbuf_wr						: Signal.Type(vh.std_logic).Output,
 	int_trig					: Signal.Type(vh.std_logic_vector, 6+1 - 0).Output,
 	
-	TRISTATE					: vh.integer = 1): 
+	TRISTATE					: int = 1): 
 	"rtl"
 
 	# Types
@@ -74,25 +78,57 @@ def t51_glue(
 
 	# Signals
 
-	reset = reset_n
+	# Here we use an array of bool
+	int_rq = [ Bool() for _ in range(int_trig.size()) ]
+
+	reset = rst_n
 
 	ie = Signal(vh.std_logic_vector()[7+1:0])
-	tcon = Signal(vh.std_logic_vector()[7+1:0])
+	# Here we rather use a custom register signal (PASignal)
+	tcon = work.RegisterSignal("tcon", {
+			"TC0" : 1,
+			"TC1" : 1,
+			"TC2" : 1,
+			"TC3" : 1,
+			"TC4" : 1,
+			"TC5" : 1,
+			"TC6" : 1,
+			"TC7" : 1
+		}
+	)
 	pcon = Signal(vh.std_logic_vector()[7+1:0])
 	int0_r = Signal(vh.std_logic_vector()[1+1:0])
 	int1_r = Signal(vh.std_logic_vector()[1+1:0])
 
+	if TRISTATE:
+		assert False
+	else:
+
+		@always_comb
+		def select_iodata():
+			if io_addr == 0b0001000:
+				io_rdata.next = tcon
+				selected.next = True
+			elif io_addr == 0b0000111:
+				io_rdata.next = pcon
+				selected.next = True
+			elif io_addr == 0b0101000:
+				io_rdata.next = ie
+				selected.next = True
+			else:
+				io_rdata.next = DONTCARE
+				selected.next = False
+				
+
 	@always_seq(clk.posedge, reset)
-	def proc_1308():	
+	def handle_tcon():	
 		# async mux statements:		   
-		int0_r[0].next = int0
-		int0_r[1].next = int0_r[0]
-		int1_r[0].next = int1
-		int1_r[1].next = int1_r[0]
+		int0_r.next = concat(int0_r[0], int0)
+		int0_r.next = concat(int1_r[0], int1)
 		if (io_wr == True)	&  (io_addr_r == 0b0101000):			
 			ie.next = io_wdata
 		if (io_wr == True)	&  (io_addr_r == 0b0001000):			
-			tcon.next = io_wdata
+			tcon.next = _INTBV(io_wdata)
 		if (io_wr == True)	&  (io_addr_r == 0b0000111):			
 			pcon.next = io_wdata
 		if of0	==	True:			 
@@ -103,11 +139,11 @@ def t51_glue(
 			tcon[7].next = True
 		if int_acc[3]  ==  True:			
 			tcon[7].next = False
-		if tcon[0]	==	True:			 
+		if tcon.TC0	==	True:			 
 			if int_acc[0]  ==  True:				
-				tcon[1].next = False
+				tcon.TC1.next = False
 			if int0_r  ==  0b10:				
-				tcon[1].next = True
+				tcon.TC1.next = True
 		else:
 			tcon[1].next = ~int0_r[0]
 		if tcon[2]	==	True:			 
@@ -119,56 +155,56 @@ def t51_glue(
 			tcon[3].next = ~int1_r[0]
 
 	@always(ie, int0_r, tcon)
-	def proc_4654():	
+	def handle_irq():	
 		# ternary:		  
 		if (ie[7] == False)  |	(ie[0] == False):		 
-			int_trig.next = False
+			int_rq[0].next = False
 		elif tcon[0]  ==  False:		
-			int_trig.next = ~int0_r[1]
+			int_rq[0].next = ~int0_r[1]
 		else:
-			int_trig.next = tcon[1]
+			int_rq[0].next = tcon[1]
 
 	@always(ie, tcon)
 	def proc_4662():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[1] == True))	&  (tcon[5] == True):		 
-			int_trig.next = True
+			int_rq[1].next = True
 		else:
-			int_trig.next = False
+			int_rq[1].next = False
 
 	@always(ie, int1_r, tcon)
 	def proc_4668():	
 		# ternary:		  
 		if (ie[7] == False)  |	(ie[2] == False):		 
-			int_trig.next = False
+			int_rq[2].next = False
 		elif tcon[2]  ==  False:		
-			int_trig.next = ~int1_r[1]
+			int_rq[2].next = ~int1_r[1]
 		else:
-			int_trig.next = tcon[3]
+			int_rq[2].next = tcon[3]
 
 	@always(ie, tcon)
 	def proc_4676():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[3] == True))	&  (tcon[7] == True):		 
-			int_trig.next = True
+			int_rq[3].next = True
 		else:
-			int_trig.next = False
+			int_rq[3].next = False
 
 	@always(ie, ri, ti)
 	def proc_4682():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[4] == True))	&  ((ri == True) | (ti == True)):		 
-			int_trig.next = True
+			int_rq[4].next = True
 		else:
-			int_trig.next = False
+			int_rq[4].next = False
 
 	@always(ie, of2)
 	def proc_4688():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[5] == True))	&  (of2 == True):		 
-			int_trig.next = True
+			int_rq[5].next = True
 		else:
-			int_trig.next = False
+			int_rq[5].next = False
 
 	@always(io_addr)
 	def proc_4698():	
@@ -432,7 +468,8 @@ def t51_glue(
 		r0							 @assign@ ( tcon[4] ),
 		r1							 @assign@ ( tcon[6] ),
 		smod						 @assign@ ( pcon[7] ),
-		int_trig[6]					 @assign@ ( False ),
+		int_rq[6]					 @assign@ ( False ),
+		int_trig   .set (concat(*reversed(int_rq))),
 	]
 
 

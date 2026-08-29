@@ -5,10 +5,8 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 
-Addr16 = Signal.Type(intbv()[16:])
-Byte = Signal.Type(intbv()[8:])
-Bool = Signal.Type(bool)
-IOPort = Signal.Type(vh.std_logic_vector, 8)
+from cyhdl_work.types import *
+
 
 import os
 from myirl.blackbox_ext import blackbox_vhdl
@@ -58,7 +56,7 @@ def t51_alu(
     pass
 
 @blackbox_vhdl(path_prefix = os.path.dirname("../vhdl/T51_RAM.vhd") )
-def t51_ram(
+def __t51_ram(
     # signals:
     clk                         : Signal.Type(vh.std_logic),
     are                         : Signal.Type(vh.std_logic),

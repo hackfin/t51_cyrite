@@ -10,16 +10,20 @@ import cyhdl_work as work
 
 # Imports for 't8052':
 from t51_pack import *
+# override some:
+from t51_port import t51_port
+from t51_glue import t51_glue
+from t51_tc01 import t51_tc01
+
+# Finally, the core:
 from t51 import t51
 
-_SLV = lambda x : vh.Cast(vh._SLV, x)
-
-from myirl.kernel.extensions import UserProxyType
-class _intbv(intbv, UserProxyType):
-	pass
+# Must take exactly the same type:
+_SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
+IOPort = Signal.Type(vh.std_logic_vector, 8)
 
 
-_INTBV = lambda x : vh.Cast(_intbv, x)
+_INTBV = lambda x : vh.Cast(work._intbv, x)
 
 
 @block

@@ -8,6 +8,9 @@ import cyhdl_work as work
 
 # Imports for 't51_port':
 
+def to_x01z(x):
+	return x
+
 @block
 def t51_port(
 	# signals:
@@ -21,7 +24,7 @@ def t51_port(
 	ioport_in					: Signal.Type(vh.std_logic_vector, 7+1 - 0),
 	ioport_out					: Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
 	
-	TRISTATE					: vh.integer = 1): 
+	TRISTATE					: int = 0): 
 	"rtl"
 
 	# Types
@@ -33,25 +36,29 @@ def t51_port(
 	port_output = Signal(vh.std_logic_vector()[7+1:0])
 	port_input = Signal(vh.std_logic_vector()[7+1:0])
 
-	@always(rst_n, clk)
-	def proc_1170():	
-		# async mux statements:		   
-		if rst_n  ==  False:		
-			port_output.next = -1
-		elif EVENT(clk)  &	(clk == True):		  
-			if wr  ==  True:			
-				port_output.next = data_in
+	@always(clk.posedge)
+	def output_worker():	
+		if wr  ==  True:			
+			port_output.next = data_in
 
+
+	if TRISTATE:
+		assert False
+	else:
+
+		@always(port_output, port_input, sel, rd_rmw)
+		def select_io():
+			if sel:
+				if rd_rmw:
+					data_out.next = port_output
+				else:
+					data_out.next = port_input
 
 	###### Wirings: ######
 	_wires_ = [
+		ioport_out.wireup(port_output),
+		port_input.wireup(to_x01z(ioport_in))
 	]
 
 	
-	# label: iop	
-	for i in range(0, 7+1):   
-		_wires.append(ioport_out[i].wireup(port_output[i]))
-		_wires.append(port_input[i].wireup(to_x01z(ioport_in[i])))
-	
-
 	return locals()
