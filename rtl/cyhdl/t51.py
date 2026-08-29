@@ -246,7 +246,7 @@ def t51(
 			int_addra.next = int_addra_r
 
 	@always(sfr_rdata_r, amux_sfr, mem_a)
-	def proc_11474():	 
+	def select_op_a():	 
 		# ternary:		  
 		if amux_sfr  ==  True:		  
 			op_a.next = sfr_rdata_r
@@ -254,7 +254,7 @@ def t51(
 			op_a.next = mem_a
 
 	@always(inst2, bmux_inst2, inst1)
-	def proc_11476():	 
+	def select_op_b():	 
 		# ternary:		  
 		if bmux_inst2  ==  True:		
 			op_b.next = inst2
@@ -262,7 +262,7 @@ def t51(
 			op_b.next = inst1
 
 	@always(pcc, rmux_pcl, pcc, rmux_pch, res_bus)
-	def proc_11480():	 
+	def select_mem_din():	 
 		# ternary:		  
 		if rmux_pcl  ==  True:		  
 			mem_din.next = pcc[7+1:0]
@@ -272,7 +272,7 @@ def t51(
 			mem_din.next = res_bus
 
 	@always(clk.posedge)
-	def proc_2200():	
+	def sfr_worker():	
 		amux_sfr.next = False
 		bmux_inst2.next = False
 		rmux_pcl.next = False
@@ -344,7 +344,7 @@ def t51(
 			psw_stall.next = False
 
 	@always(rom_data, last, mcode)
-	def proc_11524():	 
+	def select_acc_stall():	 
 		# ternary:		  
 		if ((rom_data == 0b01110011) & (last == True))	&  (mcode[2] == True):		  
 			acc_stall.next = True
@@ -371,7 +371,7 @@ def t51(
 	bitnr_v = rom_data[2+1:0]
 
 	@always_seq(clk.posedge, rst_n)
-	def proc_2820():	
+	def select_inst1():	
 		rst_r_n.next = True
 		if iready  ==  False:			 
 			pass			
@@ -424,7 +424,7 @@ def t51(
 			elif int_addra == 0b10000001:
 				sfr_rdata.next = sp
 			elif int_addra == 0b10000100:
-				if SECONDDPTR != 0:
+				if SECONDDPTR:
 					if inc_dptr == True:
 						if next_dps == True:
 							sfr_rdata.next = dptr_inc[8:]
@@ -432,7 +432,7 @@ def t51(
 						sfr_rdata.next = dpl1
 
 			elif int_addra == 0b10000101:
-				if SECONDDPTR != 0:
+				if SECONDDPTR:
 					if inc_dptr == True:
 						if next_dps == True:
 							sfr_rdata.next = dptr_inc[16:8]
@@ -453,7 +453,7 @@ def t51(
 					sfr_rdata.next = dph0
 
 			elif int_addra == 0b10000110:
-				if SECONDDPTR != 0 and inc_dptr:
+				if SECONDDPTR and inc_dptr:
 					sfr_rdata.next = concat("0000000", dps)
 			
 			elif int_addra == 0b10111000:
@@ -468,7 +468,7 @@ def t51(
  
 
 	@always(res_bus, sfr_wr_i, int_addra_r, status_d, status_wr, psw)
-	def proc_11652():	 
+	def select_psw7():	 
 		# ternary:		  
 		if (sfr_wr_i == True)  &  (int_addra_r == 0b11010000):		  
 			next_psw7.next = res_bus[7]
@@ -478,7 +478,7 @@ def t51(
 			next_psw7.next = psw_bits[6]
 
 	@always(acc_q, acc_wr, acc)
-	def proc_11660():	 
+	def select_next_acc_z():	 
 		# ternary:		  
 		if (acc_q == 0b00000000)  &  (acc_wr == True):		  
 			next_acc_z.next = True
@@ -488,7 +488,7 @@ def t51(
 			next_acc_z.next = False
 
 	@always_seq(clk.posedge, rst_n)
-	def proc_3472():	
+	def select_acc():	
 		if acc_wr  ==  True:			
 			acc.next = acc_q
 		if b_wr  ==  True:			  
@@ -562,28 +562,34 @@ def t51(
 	else:
 		dpl_wiring = [
 			dpl.wireup(dpl0),
-			dph.wireup(dph0)
+			dph.wireup(dph0),
+			next_dps.wireup(False), # Static
 		]
 
 
 	@always(dph, dpl, inc_dptr, dptr_inc, inst, int_addra_r, mem_b, p2r, res_bus, sfr_wr_i, dps)
-	def proc_3892():	
-		# async mux statements:		   
-		ram_addr.next = concat(dph, dpl)
+	def select_ramaddr():	
+		# default:
+		ram_addr_p[1].next = dph
+		ram_addr_p[0].next = dpl
 		if inst[1]	==	False:		  
-			if (((sfr_wr_i == True) & (int_addra_r == 0b10000010)) & (dps == False))  |  ((((SECONDDPTR != 0) & (sfr_wr_i == True)) & (int_addra_r == 0b10000100)) & (dps == True)):			
+			if (((sfr_wr_i == True) & (int_addra_r == 0b10000010)) & (dps == False))  |  ((((SECONDDPTR == True) & (sfr_wr_i == True)) & (int_addra_r == 0b10000100)) & (dps == True)):			
 				ram_addr_p[0].next = res_bus
-			if (((sfr_wr_i == True) & (int_addra_r == 0b10000011)) & (dps == False))  |  ((((SECONDDPTR != 0) & (sfr_wr_i == True)) & (int_addra_r == 0b10000101)) & (dps == True)):			
+			if (((sfr_wr_i == True) & (int_addra_r == 0b10000011)) & (dps == False))  |  ((((SECONDDPTR == True) & (sfr_wr_i == True)) & (int_addra_r == 0b10000101)) & (dps == True)):			
 				ram_addr_p[1].next = res_bus
 			if inc_dptr  ==  True:			  
-				ram_addr.next = dptr_inc
+				ram_addr_p[1].next = dptr_inc[16:8]
+				ram_addr_p[0].next = dptr_inc[8:0]
+
 		else:
-			ram_addr.next = concat(p2r, mem_b)
+			ram_addr_p[1].next = p2r
+			ram_addr_p[0].next = mem_b
+
 			if (sfr_wr_i == True)  &  (int_addra_r == 0b10100000):			  
 				ram_addr_p[1].next = res_bus
 
 	@always(inst, inst, inst, pcpaused)
-	def proc_11698():	 
+	def select_ramc():	 
 		# ternary:		  
 		if (((inst[7+1:5] == 0b111) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01))  &  (pcpaused[0] == False):		 
 			ramc.next = True
@@ -656,8 +662,7 @@ def t51(
 
 
 	@always_seq(clk.posedge, rst_n)
-	def proc_4282():	
-		# async mux statements:		   
+	def dptr_worker():	
 		if ready  ==  True:			   
 			ramc_r.next = ramc
 			ramrw_r.next = ((ram_rd_i & ramc) | ram_wr_i)
@@ -667,7 +672,7 @@ def t51(
 			dpl0.next = res_bus
 		if (sfr_wr_i == True)  &  (int_addra_r == 0b10000011):			  
 			dph0.next = res_bus
-		if SECONDDPTR  !=  0:			 
+		if SECONDDPTR:
 			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000100):				  
 				dpl1.next = res_bus
 			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000101):				  
@@ -675,7 +680,7 @@ def t51(
 			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000110):				  
 				dps_r.next = res_bus[0]
 		if iready  ==  True:			
-			if (SECONDDPTR == 0)  |  ((SECONDDPTR != 0) & (dps == False)):				  
+			if (SECONDDPTR == False)  |  ((SECONDDPTR == True) & (dps == False)):				  
 				if (inst == 0b10010000)  &	(fcycle == 0b10):					 
 					dph0.next = inst1
 				if (inst == 0b10010000)  &	(fcycle == 0b11):					 
@@ -683,7 +688,7 @@ def t51(
 				if inc_dptr  ==  True:					  
 					dph0.next = dptr_inc[15+1:8]
 					dpl0.next = dptr_inc[7+1:0]
-			elif (SECONDDPTR != 0)	&  (dps == True):				 
+			elif (SECONDDPTR == True)	&  (dps == True):				 
 				if (inst == 0b10010000)  &	(fcycle == 0b10):					 
 					dph1.next = inst1
 				if (inst == 0b10010000)  &	(fcycle == 0b11):					 
@@ -707,13 +712,10 @@ def t51(
 			if (inst[7+1:2] == 0b111000)  &  (inst[1+1:0] != 0b01):				   
 				ram_rd_i.next = True
 
-	@always(dps_r)
-	def proc_4710():	
-		# async mux statements:		   
-		if SECONDDPTR  !=  0:		 
-			dps.next = dps_r
-		else:
-			dps.next = False
+
+	dps_wirings = [
+		dps.wireup(dps_r if SECONDDPTR else False)
+	]
 
 	@always_seq(clk.posedge, rst_n)
 	def irq_handle():	
@@ -758,7 +760,7 @@ def t51(
 					hpint.next = False
 
 	@always_seq(clk.posedge, rst_n)
-	def proc_5048():	
+	def pc_advance():	
 		if iready  ==  True:			
 			pc.next = npc
 			ret_r.next = ret
@@ -775,7 +777,7 @@ def t51(
 					opc.next = pc
 
 	@always(acc, bit_pattern, cjne, djnz, dph, dpl, div_rdy, fcycle, icall, inst, inst1, inst2, int_trig_r, mem_a, mem_b, next_acc_z, next_psw7, opc, op_a, pc, pcpaused, ret_r, rom_data, iready, rst_r_n, stall_pipe, ram_rd_i, ram_wr_i, ramc)
-	def proc_5174():	
+	def next_pc_select():	
 		# async mux statements:		   
 		npc.next = pc
 		j_skip.next = False
@@ -848,7 +850,7 @@ def t51(
 			npc.next = 0
 
 	@always(clk.posedge)
-	def proc_6130():	
+	def common_worker():	
 		old_mem_b.next = mem_b
 		if fcycle  ==  0b01:			
 			if inst[1]	==	True:				 
@@ -859,8 +861,24 @@ def t51(
 				pcc.next = (pc - 1)
 		sfr_rdata_r.next = sfr_rdata
 
+############################################################################	
+	# RAM instance:
+
+	ram = work.t51_ram(
+		clk = clk,
+		rst_n = rst_n,
+		are = ready,
+		wr = mem_wr,
+		din = mem_din,
+		int_addra = int_addra,
+		int_addra_r = int_addra_r,
+		int_addrb = int_addrb,
+		mem_a = mem_a,
+		mem_b = mem_b
+	)
+
 	@always(inst)
-	def proc_6284():	
+	def select_mcode():	
 		# case sequence
 		if inst == 0b00000000: # case begin		   
 			mcode.next = 0b0001
