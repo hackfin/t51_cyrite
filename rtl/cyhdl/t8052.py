@@ -14,6 +14,8 @@ from t51_pack import *
 from t51_port import t51_port
 from t51_glue import t51_glue
 from t51_tc01 import t51_tc01
+from t51_tc2 import t51_tc2
+from t51_uart import t51_uart
 
 # Finally, the core:
 from t51 import t51
@@ -258,6 +260,8 @@ def t8052(
 	)
 	
 	 # instance 't51_glue'
+	 # This creates some of the selection signals needed in order to
+	 # interface SFR map and peripheral I/O cores
 	glue51 = t51_glue(
 		TRISTATE = TRISTATE,
 

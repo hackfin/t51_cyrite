@@ -6,123 +6,146 @@ from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 import cyhdl_work as work
 
+_SLV = lambda x : vh.Cast(vh._SLV, x)
+_INTBV = lambda x : vh.Cast(work._intbv, x)
+
 # Imports for 't51_tc2':
 
 @block
 def t51_tc2(
-    # signals:
-    clk                         : Signal.Type(vh.std_logic),
-    rst_n                       : Signal.Type(vh.std_logic),
-    t2                          : Signal.Type(vh.std_logic),
-    t2ex                        : Signal.Type(vh.std_logic),
-    c_sel                       : Signal.Type(vh.std_logic),
-    ch_sel                      : Signal.Type(vh.std_logic),
-    cl_sel                      : Signal.Type(vh.std_logic),
-    h_sel                       : Signal.Type(vh.std_logic),
-    l_sel                       : Signal.Type(vh.std_logic),
-    c_wr                        : Signal.Type(vh.std_logic),
-    ch_wr                       : Signal.Type(vh.std_logic),
-    cl_wr                       : Signal.Type(vh.std_logic),
-    h_wr                        : Signal.Type(vh.std_logic),
-    l_wr                        : Signal.Type(vh.std_logic),
-    data_in                     : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    data_out                    : Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
-    user2                       : Signal.Type(vh.std_logic).Output,
-    uset2                       : Signal.Type(vh.std_logic).Output,
-    uart_clk                    : Signal.Type(vh.std_logic).Output,
-    f                           : Signal.Type(vh.std_logic).Output,
-    
-    FASTCOUNT                   : vh.integer = 0,
-    TRISTATE                    : vh.integer = 1): 
-    "rtl"
+	# signals:
+	clk							: Signal.Type(vh.std_logic),
+	rst_n						: Signal.Type(vh.std_logic),
+	t2							: Signal.Type(vh.std_logic),
+	t2ex						: Signal.Type(vh.std_logic),
+	c_sel						: Signal.Type(vh.std_logic),
+	ch_sel						: Signal.Type(vh.std_logic),
+	cl_sel						: Signal.Type(vh.std_logic),
+	h_sel						: Signal.Type(vh.std_logic),
+	l_sel						: Signal.Type(vh.std_logic),
+	c_wr						: Signal.Type(vh.std_logic),
+	ch_wr						: Signal.Type(vh.std_logic),
+	cl_wr						: Signal.Type(vh.std_logic),
+	h_wr						: Signal.Type(vh.std_logic),
+	l_wr						: Signal.Type(vh.std_logic),
+	data_in						: Signal.Type(vh.std_logic_vector, 7+1 - 0),
+	data_out					: Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
+	user2						: Signal.Type(vh.std_logic).Output,
+	uset2						: Signal.Type(vh.std_logic).Output,
+	uart_clk					: Signal.Type(vh.std_logic).Output,
+	f							: Signal.Type(vh.std_logic).Output,
+	
+	FASTCOUNT					: int = 0,
+	TRISTATE					: int = 1): 
+	"rtl"
 
-    # Types
+	# Types
 
-    # Const
+	# Const
 
-    # Signals
+	# Signals
 
-    tcon = Signal(vh.std_logic_vector()[7+1:0])
-    cnt = Signal(vh.std_logic_vector()[15+1:0])
-    cpt = Signal(vh.std_logic_vector()[15+1:0])
-    tick = Signal(bool())
-    tick12 = Signal(bool())
-    capture = Signal(bool())
+	tcon = work.RegisterSignal("TCON", {
+			"CP_RL2" : 1,
+			"C_T2" : 1,
+			"TR" : 1,
+			"EXEN2" : 1,
+			"TCLK" : 1,
+			"RCLK" : 1,
+			"EXF2" : 1,
+			"TF2" : 1,
+		}
+	)
 
-    @always(rst_n, clk)
-    def proc_1276():    
-        # async mux statements:        
-        if rst_n  ==  False:        
-            tcon.next = 0
-            cnt.next = 0
-            cpt.next = 0
-            uart_clk.next = False
-        elif EVENT(clk)  &  (clk == True):        
-            uart_clk.next = False
-            if tick  ==  True:            
-                cnt.next = vh.convert_std_logic_vector((cnt + 1))
-                if cnt  ==  0b1111111111111111:                
-                    if (tcon[4] == False)  &  (tcon[5] == False):                    
-                        tcon[7].next = True
-                    if ((tcon[0] == False) | (tcon[4] == True))  |  (tcon[5] == True):                    
-                        cnt.next = cpt
-                    uart_clk.next = True
-            if (((capture == True) & (tcon[0] == False)) & (tcon[4] == False))  &  (tcon[5] == False):            
-                cnt.next = cpt
-                tcon[6].next = True
-            if (((capture == True) & (tcon[0] == True)) & (tcon[4] == False))  &  (tcon[5] == False):            
-                cpt.next = cnt
-                tcon[6].next = True
-            if c_wr  ==  True:            
-                tcon.next = data_in
-            if h_wr  ==  True:            
-                cnt[15+1:8].next = data_in
-            if l_wr  ==  True:            
-                cnt[7+1:0].next = data_in
-            if ch_wr  ==  True:            
-                cpt[15+1:8].next = data_in
-            if cl_wr  ==  True:            
-                cpt[7+1:0].next = data_in
+	cnt = work.PASignal(intbv()[15+1:0])
+	cpt = work.PASignal(intbv()[15+1:0])
+	tick = Signal(bool())
+	tick12 = Signal(bool())
+	capture = Signal(bool())
 
-    @always(clk, rst_n)
-    def proc_1516():    
-        # async mux statements:        
-        if rst_n  ==  False:        
-            prescaler = 0
-            tick.next = False
-            tick12.next = False
-            capture.next = False
-            t_r = 0b00
-        elif EVENT(clk)  &  (clk == True):        
-            tick.next = False
-            tick12.next = False
-            capture.next = False
-            if tcon[2]  ==  True:            
-                if tcon[1]  ==  True:                
-                    tick.next = (t_r[0] & ~t_r[1])
-                else:
-                    tick.next = tick12
-            if tcon[3]  ==  True:            
-                capture.next = (e_r[1] & ~e_r[0])
-            t_r[1] = t_r[0]
-            t_r[0] = t2
-            e_r[1] = e_r[0]
-            e_r[0] = t2ex
-            if ((prescaler[0] == True) & ((tcon[4] == True) | (tcon[5] == True)))  |  (prescaler == 0b1011):            
-                prescaler = 0b0000
-                tick12.next = True
-            else:
-                prescaler = (prescaler + 1)
-            if FASTCOUNT  !=  0:            
-                tick12.next = True
+	if TRISTATE:
+		assert False
+	else:
+		@always_comb
+		def select_dataout():
+			if h_sel:
+				data_out.next = cnt[16:8]
+			elif l_sel:
+				data_out.next = cnt[8:0]
+			elif ch_sel:
+				data_out.next = cpt[15:8]
+			elif cl_sel:
+				data_out.next = cpt[8:0]
+			elif c_sel:
+				data_out.next = tcon
+			else:
+				data_out.next = work.DONTCARE
+	
+
+	@always_seq(clk.posedge, rst_n)
+	def proc_1276():	
+		uart_clk.next = False
+		if tick  ==  True:			  
+			cnt.next = (cnt + 1)
+			if cnt	==	0b1111111111111111:				   
+				if (tcon[4] == False)  &  (tcon[5] == False):					 
+					tcon[7].next = True
+				if ((tcon[0] == False) | (tcon[4] == True))  |	(tcon[5] == True):					  
+					cnt.next = cpt
+				uart_clk.next = True
+		if (((capture == True) & (tcon[0] == False)) & (tcon[4] == False))	&  (tcon[5] == False):			  
+			cnt.next = cpt
+			tcon[6].next = True
+		if (((capture == True) & (tcon[0] == True)) & (tcon[4] == False))  &  (tcon[5] == False):			 
+			cpt.next = cnt
+			tcon[6].next = True
+		if c_wr  ==  True:			  
+			tcon.next = _INTBV(data_in)
+		if h_wr  ==  True:			  
+			cnt[15+1:8].next = _INTBV(data_in)
+		if l_wr  ==  True:			  
+			cnt[7+1:0].next = _INTBV(data_in)
+		if ch_wr  ==  True:			   
+			cpt[15+1:8].next = _INTBV(data_in)
+		if cl_wr  ==  True:			   
+			cpt[7+1:0].next = _INTBV(data_in)
+
+	@always_seq(clk.posedge, rst_n)
+	def proc_1516():	
+		# async mux statements:		   
+		t_r = intbv()[2:]
+		e_r = intbv()[2:]
+		prescaler = intbv()[4:]
+
+		tick.next = False
+		tick12.next = False
+		capture.next = False
+		if tcon[2]	==	True:			 
+			if tcon[1]	==	True:				 
+				tick.next = (t_r[0] & ~t_r[1])
+			else:
+				tick.next = tick12
+		if tcon[3]	==	True:			 
+			capture.next = (e_r[1] & ~e_r[0])
+		t_r[1] = t_r[0]
+		t_r[0] = t2
+		e_r[1] = e_r[0]
+		e_r[0] = t2ex
+		if ((prescaler[0] == True) & ((tcon[4] == True) | (tcon[5] == True)))  |  (prescaler == 0b1011):			
+			prescaler = intbv(0b0000)
+			tick12.next = True
+		else:
+			prescaler = (prescaler + 1)
+		if FASTCOUNT  !=  0:			
+			tick12.next = True
 
 
-    ###### Wirings: ######
-    _wires_ = [
-        f                            @assign@ ( (tcon[6] | tcon[7]) ),
-        user2                        @assign@ ( tcon[5] ),
-        uset2                        @assign@ ( tcon[4] ),
-    ]
+	###### Wirings: ######
+	_wires_ = [
+		f							 @assign@ ( (tcon[6] | tcon[7]) ),
+		user2						 @assign@ ( tcon[5] ),
+		uset2						 @assign@ ( tcon[4] ),
+	]
 
 
-    return locals()
+	return locals()

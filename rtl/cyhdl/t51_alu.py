@@ -9,6 +9,38 @@ import cyhdl_work as work
 # Imports for 't51_alu':
 from t51_pack import *
 
+from t51_md import t51_md
+
+@block
+def addsub(a : Signal, b : Signal, sub : Signal, carry_in : Bool,
+	res : Signal.Output, carry : Bool.Output):
+
+	n = a.size()
+	b_i, fc, r = [ Signal(intbv()[n+1:]) for _ in range(3) ]
+
+	@always_comb
+	def worker0():
+		if carry_in:
+			fc.next = 1
+		else:
+			fc.next = 0
+
+		if sub:
+			b_i.next = concat("0", ~b)
+		else:
+			b_i.next = concat("0", b)
+
+	@always_comb
+	def worker1():
+		r.next = concat("0", a) + b_i + fc
+
+	logic = [
+		carry.wireup([-1])
+		res.wireup(r)
+	]
+
+	return instances()
+
 @block
 def t51_alu(
     # signals:
@@ -35,7 +67,7 @@ def t51_alu(
     ac_wr                       : Signal.Type(vh.std_logic).Output,
     ov_wr                       : Signal.Type(vh.std_logic).Output,
     
-    TRISTATE                    : vh.integer = 0): 
+    TRISTATE                    : int = 0): 
     "rtl"
 
     # Types
@@ -239,8 +271,159 @@ def t51_alu(
 	# TODO: AddSub translation
 	#
 
-	# TODO: Tristate MUX
-	#
+	inst_asub_0 = addsub(acc[4:], aop2[4:], do_a_subb, \
+		do_a_subb ^ (do_a_carry & cy_in), as_q[4:], as_ac)
+
+	inst_asub_1 = addsub(acc[7:4], aop2[7:4], do_a_subb, \
+		as_ac, as_q[7:4], as_carry7)
+
+	inst_asub_2 = addsub(acc[7], aop2[7], do_a_subb, \
+		as_carry7, as_q[7], as_cy)
+
+	inst_asub_3 = addsub(ia, ib, True, \
+		True, cjne_q, cjne_cy_n)
+
+
+	do_addsub = Bool()
+
+	do_logic = [
+		do_addsub.set(do_a_add | do_a_subb)
+	]
+
+	if TRISTATE:
+		assert False
+	else:
+		@always_comb
+		def logic_acc():
+			if do_a_clr:
+				acc_q.next = concat(acc[0] acc[8:1])
+			elif do_a_rr:
+				acc_q.next = concat(cy_in, acc[8:1])
+			elif do_a_rl:
+				acc_q.next = concat(acc[7:0], acc[7])
+			elif do_a_rlc:
+				acc_q.next = concat(acc[7:0], cy_in)
+			elif do_a_inc:
+				acc_q.next = acc + 1
+			elif do_a_dec:
+				acc_q.next = acc - 1
+			elif do_a_cpl:
+				acc_q.next = ~ack
+			elif do_a_orl:
+				acc_q.next = acc | aop2
+			elif do_a_anl:
+				acc_q.next = acc & aop2
+			elif do_a_xrl:
+				acc_q.next = acc ^ aop2
+			elif do_a_swap:
+				acc_q.next = concat(acc[4:0], acc[8:4])
+			elif do_a_xch:
+				acc_q.next = ia
+			elif do_a_xchd:
+				acc_q.next = concat(acc[8:4], ia[4:0])
+			elif do_a_mov:
+				acc_q.next = aop2
+			elif do_a_da:
+				acc_q.next = ada[8:]
+			elif do_addsub:
+				acc_q.next = as_q
+			elif do_a_mul:
+				acc_q.next = mul_q
+			elif do_a_div:
+				acc_q.next = div_q
+			else:
+				acc.q.next = work.DONTCARE
+
+
+		@always_comb
+		def logic_cy():
+			if do_cjne:
+				cy_out.next = cjne_cy
+			elif do_a_da:
+				cy_out.next = ada[8]
+			elif do_a_rrc:
+				cy_out.next = acc[0]
+			elif do_a_rlc:
+				cy_out.next = acc[7]
+			elif do_addsub:
+				cy_out.next = as_cy[7] ^ do_a_subb
+			elif do_b_c_dir:
+				if do_b_op == 0b11:
+					cy_out.next = ~cy_in
+				elif do_b_op == 0b00:
+					cy_out.next = False
+				elif do_b_op == 0b01:
+					cy_out.next = True
+				#else missing
+			elif do_b_c_ba:
+				if do_b_op == 0b11 and do_b_inv == False:
+					cy_out.next = cy_in | bit_is_one
+				elif do_b_op == 0b00 and do_b_inv == False
+					cy_out.next = cy_in & bit_is_one
+				elif do_b_op == 0b10:
+					if do_b_inv == True:
+						cy_out.next = cy_in | bit_is_one
+					else:
+						cy_out.next = bit_is_one
+				elif do_b_op == 0b11:
+					if do_b_inv:
+						cy_out.next = cy_in & bit_is_one
+					else: # UNDEFINED
+						cy_out.next = work.DONTCARE
+
+
+		@always_comb
+		def logic_ac():
+			if do_addsub:
+				ac_out.next = as_ac
+			else:
+				ac_out.next = work.DONTCARE
+
+
+		@always_comb
+		def logic_b():
+			if do_a_mul:
+				b_q.next = mul_q[16:8]
+			elif do_a_div:
+				b_q.next = div_q[16:8]
+			else:
+				b_q.next = work.DONTCARE
+	
+		@always_comb
+		def logic_ov():
+			if do_addsub:
+				ov_out.next = as_cy
+			elif do_a_div:
+				ov_out.next = div_ov
+			elif do_a_mul:
+				ov_out.next = mul_ov
+			else:
+				b_q.next = work.DONTCARE
+
+		@always_comb
+		def logic_idcpbl():
+			if do_i_inc:
+				idcpbl_q.next = ia + 1
+			elif do_i_dec:
+				idcpbl_q.next = ia - 1
+			elif do_i_orl:
+				idcpbl_q.next = iop | ia
+			elif do_i_anl:
+				idcpbl_q.next = iop & ia
+			elif do_i_xrl:
+				idcpbl_q.next = iop ^ ia
+			elif do_i_xchd:
+				idcpbl_q.next = concat(ia[8:4], acc[4:0])
+			elif do_b_ba_dir | do_b_mov:
+				idcpbl_q.next = bit_result
+			elif do_i_mov:
+				idcpbl_q.next = mov_q
+			elif do_i_movd:
+				idcpbl_q.next = ia_d
+			else:
+				idcpbl_q.next = work.DONTCARE
+
+		
 
     @always(ib, do_a_imm, ia)
     def select_aop2():    
@@ -253,7 +436,7 @@ def t51_alu(
     @always(ia)
     def select_djnz():    
         # ternary:        
-        if vh.convert_std_logic_vector((ia - 1))  !=  0b00000000:        
+        if (ia - 1)  !=  0b00000000:        
             djnz.next = True
         else:
             djnz.next = False
@@ -261,15 +444,16 @@ def t51_alu(
     @always(acc, cy_in, ac_in)
     def daa():    
         # async mux statements:        
+        add = intbv()[8:]
+        accu = intbv()[9:]
+
         accu = concat(False, acc)
-        add = 0
         if (ac_in == True)  |  (accu[3+1:0] > 9):        
             add[3+1:0] = 0b0110
         if ((cy_in == True) | (accu[7+1:4] > 9))  |  ((accu[7+1:4] == 9) & (accu[3+1:0] > 9)):        
             add[7+1:4] = 0b0110
         accu = (accu + add)
-        ada.next = vh.convert_std_logic_vector(accu)
-        ada[8].next = (accu[8] | cy_in)
+        ada.next = concat((accu[8] | cy_in), accu)
 
     @always(ib, do_i_imm, acc)
     def select_iop():    
@@ -296,9 +480,8 @@ def t51_alu(
             # Duplicate            
             mov_q.next = ia_d
         else:
-            pass        
+            mov_q.next = work.DONTCARE
         
-
     @always(cjne_q)
     def proc_7580():    
         # ternary:        
@@ -383,7 +566,6 @@ def t51_alu(
     
      # instance 't51_md'
     md = t51_md(
-
          clk = clk,
          acc = acc,
          b = b,
