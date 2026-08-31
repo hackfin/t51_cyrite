@@ -8,17 +8,10 @@ from cyrite.auxiliaries.xhdl import vhdlaux as vh
 
 import cyhdl_work as work
 
-# Imports for 't8052':
-from t51_pack import *
-# override some:
-from t51_port import t51_port
-from t51_glue import t51_glue
-from t51_tc01 import t51_tc01
-from t51_tc2 import t51_tc2
-from t51_uart import t51_uart
+from cyhdl_work.types import *
 
 # Finally, the core:
-from t51 import t51
+from t51 import T51_Factory
 
 # Must take exactly the same type:
 _SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
@@ -27,435 +20,454 @@ IOPort = Signal.Type(vh.std_logic_vector, 8)
 
 _INTBV = lambda x : vh.Cast(work._intbv, x)
 
-
-@block
-def t8052(
-	# signals:
-	clk							: ClkSignal,
-	rst_n						: ResetSignal,
-	p0_in						: IOPort,
-	p1_in						: IOPort,
-	p2_in						: IOPort,
-	p3_in						: IOPort,
-	p0_out						: IOPort.Output,
-	p1_out						: IOPort.Output,
-	p2_out						: IOPort.Output,
-	p3_out						: IOPort.Output,
-	int0						: Bool,
-	int1						: Bool,
-	t0							: Bool,
-	t1							: Bool,
-	t2							: Bool,
-	t2ex						: Bool,
-	rxd							: Bool,
-	rxd_iso						: Bool.Output,
-	rxd_o						: Bool.Output,
-	txd							: Bool.Output,
-	xram_we_o					: Bool.Output,
-	xram_stb_o					: Bool.Output,
-	xram_cyc_o					: Bool.Output,
-	xram_ack_i					: Bool,
-	xram_dat_o					: Byte.Output,
-	xram_adr_o					: Addr16.Output,
-	xram_dat_i					: Byte,
+class T51(T51_Factory):
+	from t51_port import t51_port
+	from t51_glue import t51_glue
+	from t51_tc01 import t51_tc01
+	from t51_tc2 import t51_tc2
+	from t51_uart import t51_uart
 	
-	TRISTATE					: int = 0,
-	ROMADDRESSWIDTH				: vh.integer = 16,
-	IRAMADDRESSWIDTH			: vh.integer = 8,
-	XRAMADDRESSWIDTH			: vh.integer = 11): 
-	"rtl"
-
-	EXT_MUX_IN_NUM = 8
-
-	# Types
-	# ext_mux_din_type
+	@cyrite_factory.block_component
+	def t8052(self,
+		# signals:
+		clk							: ClkSignal,
+		rst_n						: ResetSignal,
+		p0_in						: IOPort,
+		p1_in						: IOPort,
+		p2_in						: IOPort,
+		p3_in						: IOPort,
+		p0_out						: IOPort.Output,
+		p1_out						: IOPort.Output,
+		p2_out						: IOPort.Output,
+		p3_out						: IOPort.Output,
+		int0						: Bool,
+		int1						: Bool,
+		t0							: Bool,
+		t1							: Bool,
+		t2							: Bool,
+		t2ex						: Bool,
+		rxd							: Bool,
+		rxd_iso						: Bool.Output,
+		rxd_o						: Bool.Output,
+		txd							: Bool.Output,
+		xram_we_o					: Bool.Output,
+		xram_stb_o					: Bool.Output,
+		xram_cyc_o					: Bool.Output,
+		xram_ack_i					: Bool,
+		xram_dat_o					: Byte.Output,
+		xram_adr_o					: Addr16.Output,
+		xram_dat_i					: Byte,
 		
-	# ext_mux_en_type
+		TRISTATE					: int = 0,
+		ROMADDRESSWIDTH				: vh.integer = 16,
+		IRAMADDRESSWIDTH			: vh.integer = 8,
+		XRAMADDRESSWIDTH			: vh.integer = 11): 
+		"rtl"
 
-	# Const
-	
+		EXT_MUX_IN_NUM = 8
 
-	# Signals
+		# Types
+		# ext_mux_din_type
+			
+		# ext_mux_en_type
 
-	ready = Bool()
-	rom_addr = Addr16()
-	rom_data = Byte()
-	ram_addr = Addr16()
-	ram_addr_r = Addr16()
-	xram_addr = Addr16()
-	ram_rdata = Byte()
-	ram_do = Byte()
-	ram_wdata = Byte()
-	ram_rd = Bool()
-	ram_wr = Bool()
-	ram_we_n = Bool()
-	zeros = Signal(intbv()[15+1:XRAMADDRESSWIDTH])
-	ram_access = Bool()
-	mux_sel = Bool()
-	mux_sel_r = Bool()
-	ext_ram_en = Bool()
-	int_xram_sel_n = Bool()
-	io_rd = Bool()
-	io_wr = Bool()
-	io_addr = Signal(intbv()[6+1:0])
-	io_addr_r = Signal(intbv()[6+1:0])
-	io_wdata = Byte()
-	io_rdata = Byte()
-	io_rdata_arr = [ Signal(vh.std_logic_vector()[7+1:0]) for _ in range(EXT_MUX_IN_NUM) ]
-	io_rdata_en = [ Bool() for _ in range(EXT_MUX_IN_NUM) ]
-	p0_sel = Bool()
-	p1_sel = Bool()
-	p2_sel = Bool()
-	p3_sel = Bool()
-	tmod_sel = Bool()
-	tl0_sel = Bool()
-	tl1_sel = Bool()
-	th0_sel = Bool()
-	th1_sel = Bool()
-	t2con_sel = Bool()
-	rcap2l_sel = Bool()
-	rcap2h_sel = Bool()
-	tl2_sel = Bool()
-	th2_sel = Bool()
-	scon_sel = Bool()
-	sbuf_sel = Bool()
-	p0_wr = Bool()
-	p1_wr = Bool()
-	p2_wr = Bool()
-	p3_wr = Bool()
-	tmod_wr = Bool()
-	tl0_wr = Bool()
-	tl1_wr = Bool()
-	th0_wr = Bool()
-	th1_wr = Bool()
-	t2con_wr = Bool()
-	rcap2l_wr = Bool()
-	rcap2h_wr = Bool()
-	tl2_wr = Bool()
-	th2_wr = Bool()
-	scon_wr = Bool()
-	sbuf_wr = Bool()
-	user2 = Bool()
-	uset2 = Bool()
-	uart_clk = Bool()
-	r0 = Bool()
-	r1 = Bool()
-	smod = Bool()
-	int_trig_slv = Signal(vh.std_logic_vector()[6+1:0])
-	int_acc = Signal(intbv()[6+1:0])
-	ri = Bool()
-	ti = Bool()
-	of0 = Bool()
-	of1 = Bool()
-	of2 = Bool()
+		# Const
+		
 
-	@always(xram_ack_i, ext_ram_en, ram_access)
-	def select_ready():    
-		# ternary:		  
-		if (xram_ack_i == False)  &  ((ext_ram_en & ram_access) == True):		 
-			ready.next = False
-		else:
-			ready.next = True
+		# Signals
 
-	@always_seq(clk, rst_n)
-	def proc_1590():	
-		io_addr_r.next = io_addr
-		if ready  ==  True:			   
-			ram_addr_r.next = ram_addr
-		mux_sel_r.next = mux_sel
+		ready = Bool()
+		rom_addr = Addr16()
+		rom_data = Byte()
+		ram_addr = Addr16()
+		ram_addr_r = Addr16()
+		xram_addr = Addr16()
+		ram_rdata = Byte()
+		ram_do = Byte()
+		ram_wdata = Byte()
+		ram_rd = Bool()
+		ram_wr = Bool()
+		ram_we_n = Bool()
+		zeros = Signal(intbv()[15+1:XRAMADDRESSWIDTH])
+		ram_access = Bool()
+		mux_sel = Bool()
+		mux_sel_r = Bool()
+		ext_ram_en = Bool()
+		int_xram_sel_n = Bool()
+		io_rd = Bool()
+		io_wr = Bool()
+		io_addr = Signal(intbv()[6+1:0])
+		io_addr_r = Signal(intbv()[6+1:0])
+		io_wdata = Byte()
+		io_rdata = Byte()
+		io_rdata_arr = [ Signal(vh.std_logic_vector()[7+1:0]) for _ in range(EXT_MUX_IN_NUM) ]
+		io_rdata_en = [ Bool() for _ in range(EXT_MUX_IN_NUM) ]
+		p0_sel = Bool()
+		p1_sel = Bool()
+		p2_sel = Bool()
+		p3_sel = Bool()
+		tmod_sel = Bool()
+		tl0_sel = Bool()
+		tl1_sel = Bool()
+		th0_sel = Bool()
+		th1_sel = Bool()
+		t2con_sel = Bool()
+		rcap2l_sel = Bool()
+		rcap2h_sel = Bool()
+		tl2_sel = Bool()
+		th2_sel = Bool()
+		scon_sel = Bool()
+		sbuf_sel = Bool()
+		p0_wr = Bool()
+		p1_wr = Bool()
+		p2_wr = Bool()
+		p3_wr = Bool()
+		tmod_wr = Bool()
+		tl0_wr = Bool()
+		tl1_wr = Bool()
+		th0_wr = Bool()
+		th1_wr = Bool()
+		t2con_wr = Bool()
+		rcap2l_wr = Bool()
+		rcap2h_wr = Bool()
+		tl2_wr = Bool()
+		th2_wr = Bool()
+		scon_wr = Bool()
+		sbuf_wr = Bool()
+		user2 = Bool()
+		uset2 = Bool()
+		uart_clk = Bool()
+		r0 = Bool()
+		r1 = Bool()
+		smod = Bool()
+		int_trig_slv = Signal(vh.std_logic_vector()[6+1:0])
+		int_acc = Signal(intbv()[6+1:0])
+		ri = Bool()
+		ti = Bool()
+		of0 = Bool()
+		of1 = Bool()
+		of2 = Bool()
 
-	@always(ram_rd, ram_wr)
-	def select_ram_access():	
-		# ternary:		  
-		if (ram_rd | ram_wr)  ==  True:		   
-			ram_access.next = True
-		else:
-			ram_access.next = False
+		@always(xram_ack_i, ext_ram_en, ram_access)
+		def select_ready():    
+			# ternary:		  
+			if (xram_ack_i == False)  &  ((ext_ram_en & ram_access) == True):		 
+				ready.next = False
+			else:
+				ready.next = True
 
-	@always(ram_do, mux_sel_r, xram_dat_i)
-	def select_ram_read():	  
-		# ternary:		  
-		if mux_sel_r  ==  False:		
-			ram_rdata.next = ram_do
-		else:
-			ram_rdata.next = xram_dat_i
+		@always_seq(clk, rst_n)
+		def proc_1590():	
+			io_addr_r.next = io_addr
+			if ready  ==  True:			   
+				ram_addr_r.next = ram_addr
+			mux_sel_r.next = mux_sel
+
+		@always(ram_rd, ram_wr)
+		def select_ram_access():	
+			# ternary:		  
+			if (ram_rd | ram_wr)  ==  True:		   
+				ram_access.next = True
+			else:
+				ram_access.next = False
+
+		@always(ram_do, mux_sel_r, xram_dat_i)
+		def select_ram_read():	  
+			# ternary:		  
+			if mux_sel_r  ==  False:		
+				ram_rdata.next = ram_do
+			else:
+				ram_rdata.next = xram_dat_i
 
 
-	###### Wirings: ######
-	_wires_ = [
-		xram_adr_o					 @assign@ ( xram_addr[15+1:0] ),
-		xram_dat_o					 @assign@ ( ram_wdata ),
-		xram_cyc_o					 @assign@ ( (ext_ram_en & ram_access) ),
-		xram_stb_o					 @assign@ ( (ext_ram_en & ram_access) ),
-		xram_we_o					 @assign@ ( ram_wr ),
-		xram_addr					 @assign@ ( ram_addr_r ),
-		zeros						 @assign@ ( 0 ),
-		mux_sel						 @assign@ ( ext_ram_en ),
-		int_xram_sel_n				 @assign@ ( ext_ram_en ),
-		ram_we_n					 @assign@ ( ~ram_wr ),
-		io_rdata_en[1]				 @assign@ ( p0_sel ),
-		io_rdata_en[2]				 @assign@ ( p1_sel ),
-		io_rdata_en[3]				 @assign@ ( p2_sel ),
-		io_rdata_en[4]				 @assign@ ( p3_sel ),
-		io_rdata_en[5]				 @assign@ ( ((((tmod_sel | th0_sel) | tl0_sel) | th1_sel) | tl1_sel) ),
-		io_rdata_en[6]				 @assign@ ( ((((t2con_sel | rcap2h_sel) | rcap2l_sel) | th2_sel) | tl2_sel) ),
-		io_rdata_en[7]				 @assign@ ( (scon_sel | sbuf_sel) ),
-	]
+		###### Wirings: ######
+		_wires_ = [
+			xram_adr_o					 @assign@ ( xram_addr[15+1:0] ),
+			xram_dat_o					 @assign@ ( ram_wdata ),
+			xram_cyc_o					 @assign@ ( (ext_ram_en & ram_access) ),
+			xram_stb_o					 @assign@ ( (ext_ram_en & ram_access) ),
+			xram_we_o					 @assign@ ( ram_wr ),
+			xram_addr					 @assign@ ( ram_addr_r ),
+			zeros						 @assign@ ( 0 ),
+			mux_sel						 @assign@ ( ext_ram_en ),
+			int_xram_sel_n				 @assign@ ( ext_ram_en ),
+			ram_we_n					 @assign@ ( ~ram_wr ),
+			io_rdata_en[1]				 @assign@ ( p0_sel ),
+			io_rdata_en[2]				 @assign@ ( p1_sel ),
+			io_rdata_en[3]				 @assign@ ( p2_sel ),
+			io_rdata_en[4]				 @assign@ ( p3_sel ),
+			io_rdata_en[5]				 @assign@ ( ((((tmod_sel | th0_sel) | tl0_sel) | th1_sel) | tl1_sel) ),
+			io_rdata_en[6]				 @assign@ ( ((((t2con_sel | rcap2h_sel) | rcap2l_sel) | th2_sel) | tl2_sel) ),
+			io_rdata_en[7]				 @assign@ ( (scon_sel | sbuf_sel) ),
+		]
 
-	with open("/tmp/patched.bin", "rb") as f:
-		ROM_DATA = f.read()
-		f.close()
+		with open("/tmp/patched.bin", "rb") as f:
+			ROM_DATA = f.read()
+			f.close()
 
-	
-	 # instance 'rom52'
-	rom = work.rom52(
-		clk = clk,
-		i = rom_addr,
-		o = rom_data,
-		INITDATA = ROM_DATA
-	)
+		
+		 # instance 'rom52'
+		rom = work.rom52(
+			clk = clk,
+			i = rom_addr,
+			o = rom_data,
+			INITDATA = ROM_DATA
+		)
 
-	ram = work.ssram(
-		clk = clk,
-		ce_n = int_xram_sel_n,
-		we_n = ram_we_n,
-		a = xram_addr[XRAMADDRESSWIDTH:0],
-		din = ram_wdata,
-		dout = ram_do
-	)
+		ram = work.ssram(
+			clk = clk,
+			ce_n = int_xram_sel_n,
+			we_n = ram_we_n,
+			a = xram_addr[XRAMADDRESSWIDTH:0],
+			din = ram_wdata,
+			dout = ram_do
+		)
 
-	ram_cycle = Bool()
-	iram_wr = Bool()
-	iram_addr = Byte()
-	iram_wdata = Byte()
-	
-	 # instance 't51'
-	core51 = t51(
-		clk = clk,
-		rst_n = rst_n,
-		ready = ready,
-		rom_addr = rom_addr,
-		rom_data = rom_data,
-		ram_addr = ram_addr,
-		ram_rdata = ram_rdata,
-		ram_wdata = ram_wdata,
-		ram_rd = ram_rd,
-		ram_wr = ram_wr,
-		ram_cycle = ram_cycle,
-		int_trig = _INTBV(int_trig_slv),
-		int_acc = int_acc,
-		sfr_rd_rmw = io_rd,
-		sfr_wr = io_wr,
-		sfr_addr = io_addr,
-		sfr_wdata = io_wdata,
-		sfr_rdata_in = io_rdata,
-		iram_wr = iram_wr,
-		iram_addr = iram_addr,
-		iram_wdata = iram_wdata,
+		ram_cycle = Bool()
+		iram_wr = Bool()
+		iram_addr = Byte()
+		iram_wdata = Byte()
+		
+		 # instance 't51'
+		core51 = self.t51(
+			clk = clk,
+			rst_n = rst_n,
+			ready = ready,
+			rom_addr = rom_addr,
+			rom_data = rom_data,
+			ram_addr = ram_addr,
+			ram_rdata = ram_rdata,
+			ram_wdata = ram_wdata,
+			ram_rd = ram_rd,
+			ram_wr = ram_wr,
+			ram_cycle = ram_cycle,
+			int_trig = _INTBV(int_trig_slv),
+			int_acc = int_acc,
+			sfr_rd_rmw = io_rd,
+			sfr_wr = io_wr,
+			sfr_addr = io_addr,
+			sfr_wdata = io_wdata,
+			sfr_rdata_in = io_rdata,
+			iram_wr = iram_wr,
+			iram_addr = iram_addr,
+			iram_wdata = iram_wdata,
 
-		DUALBUS = True,
-		RAMADDRESSWIDTH = IRAMADDRESSWIDTH,
-		T8032 = False,
-		TRISTATE = TRISTATE,
-	)
-	
-	 # instance 't51_glue'
-	 # This creates some of the selection signals needed in order to
-	 # interface SFR map and peripheral I/O cores
-	glue51 = t51_glue(
-		TRISTATE = TRISTATE,
+			DUALBUS = True,
+			RAMADDRESSWIDTH = IRAMADDRESSWIDTH,
+			T8032 = False,
+			TRISTATE = TRISTATE,
+		)
+		
+		 # instance 't51_glue'
+		 # This creates some of the selection signals needed in order to
+		 # interface SFR map and peripheral I/O cores
+		glue51 = self.t51_glue(
+			TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		int0 = int0,
-		int1 = int1,
-		ri = ri,
-		ti = ti,
-		of0 = of0,
-		of1 = of1,
-		of2 = of2,
-		io_wr = io_wr,
-		io_addr = _SLV(io_addr),
-		io_addr_r = _SLV(io_addr_r),
-		io_wdata = _SLV(io_wdata),
-		io_rdata = io_rdata_arr[0],
-		selected = io_rdata_en[0],
-		int_acc = _SLV(int_acc),
-		r0 = r0,
-		r1 = r1,
-		smod = smod,
-		p0_sel = p0_sel,
-		p1_sel = p1_sel,
-		p2_sel = p2_sel,
-		p3_sel = p3_sel,
-		tmod_sel = tmod_sel,
-		tl0_sel = tl0_sel,
-		tl1_sel = tl1_sel,
-		th0_sel = th0_sel,
-		th1_sel = th1_sel,
-		t2con_sel = t2con_sel,
-		rcap2l_sel = rcap2l_sel,
-		rcap2h_sel = rcap2h_sel,
-		tl2_sel = tl2_sel,
-		th2_sel = th2_sel,
-		scon_sel = scon_sel,
-		sbuf_sel = sbuf_sel,
-		p0_wr = p0_wr,
-		p1_wr = p1_wr,
-		p2_wr = p2_wr,
-		p3_wr = p3_wr,
-		tmod_wr = tmod_wr,
-		tl0_wr = tl0_wr,
-		tl1_wr = tl1_wr,
-		th0_wr = th0_wr,
-		th1_wr = th1_wr,
-		t2con_wr = t2con_wr,
-		rcap2l_wr = rcap2l_wr,
-		rcap2h_wr = rcap2h_wr,
-		tl2_wr = tl2_wr,
-		th2_wr = th2_wr,
-		scon_wr = scon_wr,
-		sbuf_wr = sbuf_wr,
-		int_trig = int_trig_slv
-	)
-	
-	 # instance 't51_port'
-	tp0 = t51_port(
-		TRISTATE = TRISTATE,
+			clk = clk,
+			rst_n = rst_n,
+			int0 = int0,
+			int1 = int1,
+			ri = ri,
+			ti = ti,
+			of0 = of0,
+			of1 = of1,
+			of2 = of2,
+			io_wr = io_wr,
+			io_addr = _SLV(io_addr),
+			io_addr_r = _SLV(io_addr_r),
+			io_wdata = _SLV(io_wdata),
+			io_rdata = io_rdata_arr[0],
+			selected = io_rdata_en[0],
+			int_acc = _SLV(int_acc),
+			r0 = r0,
+			r1 = r1,
+			smod = smod,
+			p0_sel = p0_sel,
+			p1_sel = p1_sel,
+			p2_sel = p2_sel,
+			p3_sel = p3_sel,
+			tmod_sel = tmod_sel,
+			tl0_sel = tl0_sel,
+			tl1_sel = tl1_sel,
+			th0_sel = th0_sel,
+			th1_sel = th1_sel,
+			t2con_sel = t2con_sel,
+			rcap2l_sel = rcap2l_sel,
+			rcap2h_sel = rcap2h_sel,
+			tl2_sel = tl2_sel,
+			th2_sel = th2_sel,
+			scon_sel = scon_sel,
+			sbuf_sel = sbuf_sel,
+			p0_wr = p0_wr,
+			p1_wr = p1_wr,
+			p2_wr = p2_wr,
+			p3_wr = p3_wr,
+			tmod_wr = tmod_wr,
+			tl0_wr = tl0_wr,
+			tl1_wr = tl1_wr,
+			th0_wr = th0_wr,
+			th1_wr = th1_wr,
+			t2con_wr = t2con_wr,
+			rcap2l_wr = rcap2l_wr,
+			rcap2h_wr = rcap2h_wr,
+			tl2_wr = tl2_wr,
+			th2_wr = th2_wr,
+			scon_wr = scon_wr,
+			sbuf_wr = sbuf_wr,
+			int_trig = int_trig_slv
+		)
+		
+		 # instance 't51_port'
+		tp0 = self.t51_port(
+			TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		sel = p0_sel,
-		rd_rmw = io_rd,
-		wr = p0_wr,
-		data_in = _SLV(io_wdata),
-		data_out = io_rdata_arr[1],
-		ioport_in = p0_in,
-		ioport_out = p0_out
-	)
-	
-	 # instance 't51_port'
-	tp1 = t51_port(
-		TRISTATE = TRISTATE,
+			clk = clk,
+			rst_n = rst_n,
+			sel = p0_sel,
+			rd_rmw = io_rd,
+			wr = p0_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[1],
+			ioport_in = p0_in,
+			ioport_out = p0_out
+		)
+		
+		 # instance 't51_port'
+		tp1 = self.t51_port(
+			TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		sel = p1_sel,
-		rd_rmw = io_rd,
-		wr = p1_wr,
-		data_in = _SLV(io_wdata),
-		data_out = io_rdata_arr[2],
-		ioport_in = p1_in,
-		ioport_out = p1_out
-	)
-	
-	 # instance 't51_port'
-	tp2 = t51_port(
-		TRISTATE = TRISTATE,
+			clk = clk,
+			rst_n = rst_n,
+			sel = p1_sel,
+			rd_rmw = io_rd,
+			wr = p1_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[2],
+			ioport_in = p1_in,
+			ioport_out = p1_out
+		)
+		
+		 # instance 't51_port'
+		tp2 = self.t51_port(
+			TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		sel = p2_sel,
-		rd_rmw = io_rd,
-		wr = p2_wr,
-		data_in = _SLV(io_wdata),
-		data_out = io_rdata_arr[3],
-		ioport_in = p2_in,
-		ioport_out = p2_out
-	)
-	
-	 # instance 't51_port'
-	tp3 = t51_port(
-		TRISTATE = TRISTATE,
+			clk = clk,
+			rst_n = rst_n,
+			sel = p2_sel,
+			rd_rmw = io_rd,
+			wr = p2_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[3],
+			ioport_in = p2_in,
+			ioport_out = p2_out
+		)
+		
+		 # instance 't51_port'
+		tp3 = self.t51_port(
+			TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		sel = p3_sel,
-		rd_rmw = io_rd,
-		wr = p3_wr,
-		data_in = _SLV(io_wdata),
-		data_out = io_rdata_arr[4],
-		ioport_in = p3_in,
-		ioport_out = p3_out
-	)
-	
-	 # instance 't51_tc01'
-	tc01 = t51_tc01(
-		FASTCOUNT = 0, TRISTATE = TRISTATE,
+			clk = clk,
+			rst_n = rst_n,
+			sel = p3_sel,
+			rd_rmw = io_rd,
+			wr = p3_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[4],
+			ioport_in = p3_in,
+			ioport_out = p3_out
+		)
+		
+		 # instance 't51_tc01'
+		tc01 = self.t51_tc01(
+			FASTCOUNT = 0, TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		t0 = t0,
-		t1 = t1,
-		int0 = int0,
-		int1 = int1,
-		m_sel = tmod_sel,
-		h0_sel = th0_sel,
-		l0_sel = tl0_sel,
-		h1_sel = th1_sel,
-		l1_sel = tl1_sel,
-		r0 = r0,
-		r1 = r1,
-		m_wr = tmod_wr,
-		h0_wr = th0_wr,
-		l0_wr = tl0_wr,
-		h1_wr = th1_wr,
-		l1_wr = tl1_wr,
-		data_in = _SLV(io_wdata),
-		data_out = io_rdata_arr[5],
-		of0 = of0,
-		of1 = of1
-	)
-	
-	 # instance 't51_tc2'
-	tc2 = t51_tc2(
-		FASTCOUNT = 0, TRISTATE = TRISTATE,
+			clk = clk,
+			rst_n = rst_n,
+			t0 = t0,
+			t1 = t1,
+			int0 = int0,
+			int1 = int1,
+			m_sel = tmod_sel,
+			h0_sel = th0_sel,
+			l0_sel = tl0_sel,
+			h1_sel = th1_sel,
+			l1_sel = tl1_sel,
+			r0 = r0,
+			r1 = r1,
+			m_wr = tmod_wr,
+			h0_wr = th0_wr,
+			l0_wr = tl0_wr,
+			h1_wr = th1_wr,
+			l1_wr = tl1_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[5],
+			of0 = of0,
+			of1 = of1
+		)
+		
+		 # instance 't51_tc2'
+		tc2 = self.t51_tc2(
+			FASTCOUNT = 0, TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		t2 = t2,
-		t2ex = t2ex,
-		c_sel = t2con_sel,
-		ch_sel = rcap2h_sel,
-		cl_sel = rcap2l_sel,
-		h_sel = th2_sel,
-		l_sel = tl2_sel,
-		c_wr = t2con_wr,
-		ch_wr = rcap2h_wr,
-		cl_wr = rcap2l_wr,
-		h_wr = th2_wr,
-		l_wr = tl2_wr,
-		data_in = _SLV(io_wdata),
-		data_out = io_rdata_arr[6],
-		user2 = user2,
-		uset2 = uset2,
-		uart_clk = uart_clk,
-		f = of2
-	)
-	
-	 # instance 't51_uart'
-	uart = t51_uart(
-		FASTCOUNT = 0, TRISTATE = TRISTATE,
+			clk = clk,
+			rst_n = rst_n,
+			t2 = t2,
+			t2ex = t2ex,
+			c_sel = t2con_sel,
+			ch_sel = rcap2h_sel,
+			cl_sel = rcap2l_sel,
+			h_sel = th2_sel,
+			l_sel = tl2_sel,
+			c_wr = t2con_wr,
+			ch_wr = rcap2h_wr,
+			cl_wr = rcap2l_wr,
+			h_wr = th2_wr,
+			l_wr = tl2_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[6],
+			user2 = user2,
+			uset2 = uset2,
+			uart_clk = uart_clk,
+			f = of2
+		)
+		
+		 # instance 't51_uart'
+		uart = self.t51_uart(
+			FASTCOUNT = 0, TRISTATE = TRISTATE,
 
-		clk = clk,
-		rst_n = rst_n,
-		user2 = user2,
-		uset2 = uset2,
-		baudc2 = uart_clk,
-		baudc1 = of1,
-		sc_sel = scon_sel,
-		sb_sel = sbuf_sel,
-		sc_wr = scon_wr,
-		sb_wr = sbuf_wr,
-		smod = smod,
-		data_in = _SLV(io_wdata),
-		data_out = io_rdata_arr[7],
-		rxd = rxd,
-		rxd_iso = rxd_iso,
-		rxd_o = rxd_o,
-		txd = txd,
-		ri = ri,
-		ti = ti
-	)
+			clk = clk,
+			rst_n = rst_n,
+			user2 = user2,
+			uset2 = uset2,
+			baudc2 = uart_clk,
+			baudc1 = of1,
+			sc_sel = scon_sel,
+			sb_sel = sbuf_sel,
+			sc_wr = scon_wr,
+			sb_wr = sbuf_wr,
+			smod = smod,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[7],
+			rxd = rxd,
+			rxd_iso = rxd_iso,
+			rxd_o = rxd_o,
+			txd = txd,
+			ri = ri,
+			ti = ti
+		)
 
-	return locals()
+		return locals()
+
+
+class T51_VHDL(T51):
+	# Imports for 't8052':
+	import t51_pack as _p
+
+
+	t51_port  = _p.t51_port
+	t51_glue  = _p.t51_glue
+	t51_tc01  = _p.t51_tc01
+	t51_tc2   = _p.t51_tc2
+	t51_uart  = _p.t51_uart
+

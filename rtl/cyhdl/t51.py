@@ -7,1448 +7,1481 @@ from cyrite.auxiliaries.xhdl import vhdlaux as vh
 import cyhdl_work as work
 
 # Imports for 't51':
-from t51_pack import t51_alu
+
 from cyhdl_work.types import *
 
 SLV8 = Signal.Type(vh.std_logic_vector, 8)
 
-_SLV = lambda x : vh.Cast(vh._SLV, x)
+_SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
 
 Undefined8 = Signal(intbv()[8:])
 
-@block
-def t51(
-	# signals:
-	clk							: Bool,
-	rst_n						: Bool,
-	ready						: Bool,
-	rom_addr					: Addr16.Output,
-	rom_data					: Byte,
-	ram_addr					: Addr16.Output,
-	ram_rdata					: Byte,
-	ram_wdata					: Byte.Output,
-	ram_cycle					: Bool.Output,
-	ram_rd						: Bool.Output,
-	ram_wr						: Bool.Output,
-	int_trig					: Signal.Type(intbv()[7:]),
-	int_acc						: Signal.Type(intbv()[7:]).Output,
-	sfr_rd_rmw					: Bool.Output,
-	sfr_wr						: Bool.Output,
-	sfr_addr					: Signal.Type(intbv()[7:]).Output,
-	sfr_wdata					: Byte.Output,
-	sfr_rdata_in				: Byte,
-	iram_wr						: Bool.Output,
-	iram_addr					: Byte.Output,
-	iram_wdata					: Byte.Output,
-	
-	DUALBUS						: bool = True,
-	RAMADDRESSWIDTH				: int = 8,
-	SECONDDPTR					: bool = False,
-	T8032						: bool = False,
-	TRISTATE					: int = 0,
-	SIMENV						: bool = False): 
-	"rtl"
+from yosys.simulator import CXXRTL
 
-	# Types
+class T51_Factory(cyrite_factory.Module):
+	from t51_pack import t51_alu as t51_alu_vhdl_bb
 
-	# FAST CPU mode, probably not recommended
-	FAST_CPU_C = False
-	
+	from t51_alu import t51_alu as t51_alu_cyhdl_impl
 
-	# Signals
-
-	acc = Byte()
-	b = Byte()
-	psw = Signal(intbv()[7:0]) # bit 0 is parity
-	psw_bits = [ Bool() for _ in range(7) ]
-	psw0 = Signal(bool())
-	ip = Byte()
-	sp = Signal(vh.unsigned()[7+1:0])
-	dpl0 = Byte()
-	dph0 = Byte()
-	dpl1 = Byte()
-	dph1 = Byte()
-	dpl = Byte()
-	dph = Byte()
-	dps = Signal(bool())
-	next_dps = Signal(bool())
-	dptr_inc = Addr16()
-	dps_r = Signal(bool())
-	pc = Addr16()
-	p2r = Signal(intbv(-1)[7+1:0])
-	pcc = Addr16()
-	npc = Addr16()
-	opc = Addr16()
-	op_a = Byte()
-	op_b = Byte()
-	mem_a = Byte()
-	mem_b = Byte()
-	old_mem_b = Byte()
-	acc_q = Signal(vh.std_logic_vector()[8:])
-	b_q = Signal(vh.std_logic_vector()[8:])
-	res_bus = Byte()
-	res_bus_slv = Signal(vh.std_logic_vector()[8:])
-	status_d = Signal(intbv()[7+1:5])
-	status_wr = Signal(intbv()[7+1:5])
-	int_addra = Byte()
-	int_addra_r = Byte()
-	int_addrb = Byte()
-	mcode = Signal(intbv()[3+1:0])
-	fcycle = Signal(intbv(1)[1+1:0])
-	ret_r = Signal(bool())
-	ret = Signal(bool())
-	stall_pipe = Signal(bool())
-	ri_stall = Signal(bool())
-	psw_stall = Signal(bool())
-	acc_stall = Signal(bool())
-	sp_stall = Signal(bool())
-	movx_stall = Signal(bool())
-	iready = Signal(bool())
-	next_psw7 = Signal(bool())
-	next_acc_z = Signal(bool())
-	acc_wr = Signal(bool())
-	b_wr = Signal(bool())
-	sfr_rdata_r = Byte()
-	sfr_rdata = Byte()
-	mem_din = Byte()
-	bit_pattern = Byte()
-	inst = Byte()
-	inst1 = Byte()
-	inst2 = Byte()
-	rst_r_n = Signal(bool())
-	last = Signal(bool())
-	sfr_wr_i = Signal(bool())
-	mem_wr = Signal(bool())
-	j_skip = Signal(bool())
-	ipending = Signal(bool())
-	int_trig_r = Signal(intbv()[6+1:0])
-	istart = Signal(bool())
-	icall = Signal(bool())
-	hpint = Signal(bool())
-	lpint = Signal(bool())
-	pcpaused = Signal(intbv()[3+1:0])
-	pcpause = Signal(bool())
-	inst_skip = Signal(bool())
-	div_rdy = Signal(bool())
-	ram_rd_i = Signal(bool())
-	ram_wr_i = Signal(bool())
-	inc_dptr = Signal(bool())
-	cjne = Signal(bool())
-	djnz = Signal(bool())
-	amux_sfr = Signal(bool())
-	bmux_inst2 = Signal(bool())
-	rmux_pcl = Signal(bool())
-	rmux_pch = Signal(bool())
-	next_mem_wr = Signal(bool())
-	rd_flag = Signal(bool())
-	xxx_flag = Signal(bool())
-	rd_flag_r = Signal(bool())
-	rd_sfr_flag = Signal(bool())
-	do_acc_wr = Signal(bool())
-	ramc = Signal(bool())
-	ramc_r = Signal(bool())
-	ramrw_r = Signal(bool())
-
-	ram_addr_p = [ Byte() for _ in range(2) ]
-
-
-	output_wirings = [
-		ram_addr.wireup (concat(*reversed(ram_addr_p)))
-	]
-
-	@always(icall, fcycle, mcode, iready)
-	def proc_11472():	 
-		# ternary:		  
-		if (icall == True)	&  (fcycle == 0b11):		
-			last.next = True
-		elif icall	==	True:		 
-			last.next = False
-		elif (mcode[1+1:0] == fcycle)  &  (iready == True):		   
-			last.next = True
+	def __init__(self, name, target, VARIANT = 0):
+		# Here we switch between blackbox and cyhdl-version of the module
+		#
+#		if issubclass(target, CXXRTL):
+#			# Assume RTL output, pick the cyhdl implementation
+#			self.t51_alu = self.t51_alu_cyhdl_impl
+#		else:
+#			# assume VHDL, use the blackbox config
+#			self.t51_alu = self.t51_alu_vhdl_bb
+#
+		if VARIANT == 1:
+			self.t51_alu = self.t51_alu_cyhdl_impl
 		else:
-			last.next = False
+			# Known good
+			self.t51_alu = self.t51_alu_vhdl_bb
 
-	# FIXME: Use RegisterSignal abstraction
-	psw_compose = [
-		psw.wireup( concat(*reversed(psw_bits)) )
-	]
+		super().__init__(name, target)
 
-	@always(fcycle, icall, inst, inst1, inst2, int_addra_r, last, mem_b, old_mem_b, psw, rom_data, ready, sp, sfr_wr_i, res_bus)
-	def proc_1576():	
-		# async mux statements:		   
-		int_addra.next = Undefined8
-		int_addrb.next = concat("000", psw[4+1:3], "00", inst[0])
-		rd_flag.next = False
-		rd_sfr_flag.next = False
-		if (inst[3+1:0] == 0b0000)	|  (inst[3+1:0] == 0b0010):		   
-			if (inst[3+1:0] == 0b0000)	|  ((inst[3+1:0] == 0b0010) & ((inst[7] == True) | (inst[6+1:4] == 0b111))):			
-				if inst1[7]  ==  False:				   
-					int_addra.next = concat("0010", inst1[6+1:3])
-				else:
-					int_addra.next = concat(True, inst1[6+1:3], "000")
+	@cyrite_factory.block_component
+	def t51(self,
+		# signals:
+		clk							: Bool,
+		rst_n						: Bool,
+		ready						: Bool,
+		rom_addr					: Addr16.Output,
+		rom_data					: Byte,
+		ram_addr					: Addr16.Output,
+		ram_rdata					: Byte,
+		ram_wdata					: Byte.Output,
+		ram_cycle					: Bool.Output,
+		ram_rd						: Bool.Output,
+		ram_wr						: Bool.Output,
+		int_trig					: Signal.Type(intbv()[7:]),
+		int_acc						: Signal.Type(intbv()[7:]).Output,
+		sfr_rd_rmw					: Bool.Output,
+		sfr_wr						: Bool.Output,
+		sfr_addr					: Signal.Type(intbv()[7:]).Output,
+		sfr_wdata					: Byte.Output,
+		sfr_rdata_in				: Byte,
+		iram_wr						: Bool.Output,
+		iram_addr					: Byte.Output,
+		iram_wdata					: Byte.Output,
+		
+		DUALBUS						: bool = True,
+		RAMADDRESSWIDTH				: int = 8,
+		SECONDDPTR					: bool = False,
+		T8032						: bool = False,
+		TRISTATE					: int = 0,
+		SIMENV						: bool = False): 
+		"rtl"
+
+		# Types
+
+		# FAST CPU mode, probably not recommended
+		FAST_CPU_C = False
+		
+
+		# Signals
+
+		acc = Byte()
+		b = Byte()
+		psw = Signal(intbv()[7:0]) # bit 0 is parity
+		psw_bits = [ Bool() for _ in range(7) ]
+		psw0 = Signal(bool())
+		ip = Byte()
+		sp = Signal(vh.unsigned()[7+1:0])
+		dpl0 = Byte()
+		dph0 = Byte()
+		dpl1 = Byte()
+		dph1 = Byte()
+		dpl = Byte()
+		dph = Byte()
+		dps = Signal(bool())
+		next_dps = Signal(bool())
+		dptr_inc = Addr16()
+		dps_r = Signal(bool())
+		pc = Addr16()
+		p2r = Signal(intbv(-1)[7+1:0])
+		pcc = Addr16()
+		npc = Addr16()
+		opc = Addr16()
+		op_a = Byte()
+		op_b = Byte()
+		mem_a = Byte()
+		mem_b = Byte()
+		old_mem_b = Byte()
+		acc_q = Signal(vh.std_logic_vector()[8:])
+		b_q = Signal(vh.std_logic_vector()[8:])
+		res_bus = Byte()
+		res_bus_slv = Signal(vh.std_logic_vector()[8:])
+
+		BITS = {
+			"OV" : 1, "AC" : 1, "CY" : 1
+		}
+
+		status_d = work.RegisterSignal("STATUS_D", BITS )
+
+		status_wr = work.RegisterSignal("STATUS_WR", BITS)
+
+		int_addra = Byte()
+		int_addra_r = Byte()
+		int_addrb = Byte()
+		mcode = Signal(intbv()[3+1:0])
+		fcycle = Signal(intbv(1)[1+1:0])
+		ret_r = Signal(bool())
+		ret = Signal(bool())
+		stall_pipe = Signal(bool())
+		ri_stall = Signal(bool())
+		psw_stall = Signal(bool())
+		acc_stall = Signal(bool())
+		sp_stall = Signal(bool())
+		movx_stall = Signal(bool())
+		iready = Signal(bool())
+		next_psw7 = Signal(bool())
+		next_acc_z = Signal(bool())
+		acc_wr = Signal(bool())
+		b_wr = Signal(bool())
+		sfr_rdata_r = Byte()
+		sfr_rdata = Byte()
+		mem_din = Byte()
+		bit_pattern = Byte()
+		inst = Byte()
+		inst1 = Byte()
+		inst2 = Byte()
+		rst_r_n = Signal(bool())
+		last = Signal(bool())
+		sfr_wr_i = Signal(bool())
+		mem_wr = Signal(bool())
+		j_skip = Signal(bool())
+		ipending = Signal(bool())
+		int_trig_r = Signal(intbv()[6+1:0])
+		istart = Signal(bool())
+		icall = Signal(bool())
+		hpint = Signal(bool())
+		lpint = Signal(bool())
+		pcpaused = Signal(intbv()[3+1:0])
+		pcpause = Signal(bool())
+		inst_skip = Signal(bool())
+		div_rdy = Signal(bool())
+		ram_rd_i = Signal(bool())
+		ram_wr_i = Signal(bool())
+		inc_dptr = Signal(bool())
+		cjne = Signal(bool())
+		djnz = Signal(bool())
+		amux_sfr = Signal(bool())
+		bmux_inst2 = Signal(bool())
+		rmux_pcl = Signal(bool())
+		rmux_pch = Signal(bool())
+		next_mem_wr = Signal(bool())
+		rd_flag = Signal(bool())
+		xxx_flag = Signal(bool())
+		rd_flag_r = Signal(bool())
+		rd_sfr_flag = Signal(bool())
+		do_acc_wr = Signal(bool())
+		ramc = Signal(bool())
+		ramc_r = Signal(bool())
+		ramrw_r = Signal(bool())
+
+		ram_addr_p = [ Byte() for _ in range(2) ]
+
+
+		output_wirings = [
+			ram_addr.wireup (concat(*reversed(ram_addr_p)))
+		]
+
+		@always(icall, fcycle, mcode, iready)
+		def proc_11472():	 
+			# ternary:		  
+			if (icall == True)	&  (fcycle == 0b11):		
+				last.next = True
+			elif icall	==	True:		 
+				last.next = False
+			elif (mcode[1+1:0] == fcycle)  &  (iready == True):		   
+				last.next = True
 			else:
-				int_addra.next = inst1
-			if (inst == 0b00010010)  |	(icall == True):			
-				if fcycle  ==  0b01:				
-					int_addra.next = sp + 1
-				else:
-					int_addra.next = sp + 2
-			if inst  ==  0b11000000:			
-				if fcycle  ==  0b10:				
-					int_addra.next = sp
-				else:
-					int_addra.next = inst1
-			if inst  ==  0b11010000:			
-				if fcycle  ==  0b10:				
-					int_addra.next = inst1
-				else:
-					int_addra.next = sp
-			if (inst[7+1:5] == 0b001)  &  (inst[3+1:0] == 0b0010):			  
-				int_addra.next = sp
-				int_addrb.next = (sp - 1)
-		elif inst[4+1:0]  ==  0b10001:		  
-			if fcycle  ==  0b01:			
-				int_addra.next = (sp + 1)
-			else:
-				int_addra.next = (sp + 2)
-		elif inst[3+1:0]  ==  0b0011:		 
-			int_addra.next = inst1
-		elif inst[3+1:0]  ==  0b0100:		 
-			pass		
-		elif inst[3+1:0]  ==  0b0101:		 
-			if (inst[7+1:4] == 0b1000)	&  (fcycle == 0b11):			
-				int_addra.next = inst2
-			else:
-				int_addra.next = inst1
-		elif inst[3+1:1]  ==  0b011:		
-			if fcycle[1+1:0]  ==  0b01:			   
-				int_addra.next = mem_b
-			else:
-				int_addra.next = old_mem_b
-			if (inst[7+1:4] == 0b1000)	&  (fcycle == 0b10):			
-				int_addra.next = inst1
-			if (inst[7+1:4] == 0b1010)	&  (fcycle == 0b01):			
-				int_addra.next = rom_data
-				rd_flag.next = True
-		elif inst[3]  ==  True:		   
-			int_addra.next = concat("000", psw[4+1:3], inst[2+1:0])
-			if (inst[7+1:4] == 0b1000)	&  (fcycle == 0b10):			
-				int_addra.next = inst1
-			if (inst[7+1:4] == 0b1010)	&  (fcycle == 0b01):			
-				int_addra.next = rom_data
-				rd_flag.next = True
-		if ((inst[7+1:5] != 0b001) | (inst[3+1:0] != 0b0010))  &  ((((rom_data[3+1:1] == 0b011) | (inst[3+1:1] == 0b011)) | (rom_data[7+1:1] == 0b1110001)) | (rom_data[7+1:1] == 0b1111001)):		  
-			if last  ==  True:			  
-				int_addrb.next = concat("000", psw[4+1:3], "00", rom_data[0])
-				if ( FAST_CPU_C != 0 and (sfr_wr_i == True))  &  (int_addra_r == 0b11010000):				 
-					int_addrb.next = concat("000", res_bus[4+1:3], "00", rom_data[0])
-			rd_sfr_flag.next = True
-		if ready  ==  False:		
-			int_addra.next = int_addra_r
+				last.next = False
 
-	@always(sfr_rdata_r, amux_sfr, mem_a)
-	def select_op_a():	 
-		# ternary:		  
-		if amux_sfr  ==  True:		  
-			op_a.next = sfr_rdata_r
-		else:
-			op_a.next = mem_a
+		# FIXME: Use RegisterSignal abstraction
+		psw_compose = [
+			psw.wireup( concat(*reversed(psw_bits)) )
+		]
 
-	@always(inst2, bmux_inst2, inst1)
-	def select_op_b():	 
-		# ternary:		  
-		if bmux_inst2  ==  True:		
-			op_b.next = inst2
-		else:
-			op_b.next = inst1
-
-	@always(pcc, rmux_pcl, pcc, rmux_pch, res_bus)
-	def select_mem_din():	 
-		# ternary:		  
-		if rmux_pcl  ==  True:		  
-			mem_din.next = pcc[7+1:0]
-		elif rmux_pch  ==  True:		
-			mem_din.next = pcc[15+1:8]
-		else:
-			mem_din.next = res_bus
-
-	@always(clk.posedge)
-	def sfr_worker():	
-		amux_sfr.next = False
-		bmux_inst2.next = False
-		rmux_pcl.next = False
-		rmux_pch.next = False
-		if int_addra[7]  ==  True:			  
-			amux_sfr.next = True
-		if inst[3+1:1]	==	0b011:			  
-			if inst[8:4] != 0b1010:
-				amux_sfr.next = False
-		if inst  ==  0b11010000:			
-			amux_sfr.next = False
-		if (inst[3+1:0] == 0b0011)	|  (inst[3+1:0] == 0b0101):			   
-			bmux_inst2.next = True
-		if ((inst == 0b00010010) | (inst[4+1:0] == 0b10001))  |  (icall == True):			 
-			if fcycle  ==  0b01:				
-				rmux_pcl.next = True
-			elif fcycle  ==  0b10:				  
-				rmux_pch.next = True
-			else:
-				# FIXME: Uncovered
-				pass
-	   
-	@always(last, mcode, int_addra, inst, inst, inst)
-	def select_sfr_rd():	 
-		# ternary:		  
-		if ((((last == True) & (mcode[3] == True)) & (int_addra[7] == True)) & ((inst[7+1:4] == 0b1000) | (inst[3+1:1] != 0b011)))	&  (inst != 0b11000000):		
-			sfr_rd_rmw.next = True
-		else:
-			sfr_rd_rmw.next = False
-
-	@always(last, mcode, int_addra, inst, inst, inst)
-	def select_next_memwr():	 
-		# ternary:		  
-		if ((last == True) & (mcode[3] == True))  &  (((int_addra[7] == False) | ((inst[7+1:4] != 0b1000) & (inst[3+1:1] == 0b011))) | (inst == 0b11000000)):		 
-			next_mem_wr.next = True
-		else:
-			next_mem_wr.next = False
-
-	@always(clk.posedge)
-	def select_memwr():	
-		sfr_wr_i.next = False
-		mem_wr.next = False
-		if (last == True)  &  (mcode[3] == True):			 
-			if ((int_addra[7] == True) & ((inst[7+1:4] == 0b1000) | (inst[3+1:1] != 0b011)))  &  (inst != 0b11000000):				  
-				if inst  ==  0b00010000:					
-					sfr_wr_i.next = j_skip
-				else:
-					sfr_wr_i.next = True
-			else:
-				mem_wr.next = True
-		if (iready == True)  &	(((inst == 0b00010010) | (inst[4+1:0] == 0b10001)) | (icall == True)):			  
-			if fcycle  !=  0b11:				
-				mem_wr.next = True
-
-	@always(inst, next_mem_wr, int_addra, psw, rom_data)
-	def select_ri_stall():	 
-		# ternary:		  
-		if ((inst != 0b00000000) & (next_mem_wr == True))  &  ((int_addra == concat("000", psw[4+1:3], "00", rom_data[0])) & (((rom_data[3+1:1] == 0b011) | (rom_data[7+1:1] == 0b1110001)) | (rom_data[7+1:1] == 0b1111001))):		   
-			ri_stall.next = True
-		else:
-			ri_stall.next = False
-
-	@always(int_addra, next_mem_wr, rom_data, rom_data, last, mcode)
-	def select_psw_stall():	 
-		# ternary:		  
-		if ((((int_addra == 0b11010000) & (next_mem_wr == False)) & ((rom_data[3+1:1] == 0b011) | (rom_data[3] == True))) & (last == True))  &	(mcode[3] == True):		   
-			psw_stall.next = True
-		else:
-			psw_stall.next = False
-
-	@always(rom_data, last, mcode)
-	def select_acc_stall():	 
-		# ternary:		  
-		if ((rom_data == 0b01110011) & (last == True))	&  (mcode[2] == True):		  
-			acc_stall.next = True
-		else:
-			acc_stall.next = False
-
-	@always(last, mcode, int_addra, inst, rom_data, rom_data, istart)
-	def select_spstall():	 
-		# ternary:		  
-		if (((((last == True) & (mcode[3] == True)) & (int_addra == 0b10000001)) & ((inst[7+1:4] == 0b1000) | (inst[3+1:1] != 0b011))) & (inst != 0b11000000))	&  (((rom_data == 0b00010010) | (rom_data[4+1:0] == 0b10001)) | (istart == True)):		  
-			sp_stall.next = True
-		else:
-			sp_stall.next = False
-
-	@always(last, inst, rom_data, rom_data, rom_data)
-	def select_movx():	 
-		# ternary:		  
-		if ((((((last == True) & (inst[7+1:5] == 0b111)) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01)) & (rom_data[7+1:5] == 0b111)) & (rom_data[3+1:2] == 0b00))  &  (rom_data[1+1:0] != 0b01):		
-			movx_stall.next = True
-		else:
-			movx_stall.next = False
-
-
-	bitnr_v = rom_data[2+1:0]
-
-	@always_seq(clk.posedge, rst_n)
-	def select_inst1():	
-		rst_r_n.next = True
-		if iready  ==  False:			 
-			pass			
-		elif (((rst_r_n == False) | (inst_skip == True)) | (istart == True))  |  (stall_pipe == True):			  
-			inst.next = 0
-		elif (inst == 0b10000100)  &  (pcpause == True):			
-			pass			
-		else:
-			if last  ==  True:				  
-				inst.next = rom_data
-			if fcycle  ==  0b01:				
-				inst1.next = rom_data
-			if fcycle  ==  0b10:				
-				inst2.next = rom_data
-		if fcycle  ==  0b01:			
-			if bitnr_v == 0:
-				bit_pattern.next = 0b00000001
-			elif bitnr_v == 1:
-				bit_pattern.next = 0b00000010
-			elif bitnr_v == 2:
-				bit_pattern.next = 0b00000100
-			elif bitnr_v == 3:
-				bit_pattern.next = 0b00001000
-			elif bitnr_v == 4:
-				bit_pattern.next = 0b00010000
-			elif bitnr_v == 5:
-				bit_pattern.next = 0b00100000
-			elif bitnr_v == 6:
-				bit_pattern.next = 0b01000000
-			else:
-			#elif bitnr_v == 7:
-				bit_pattern.next = 0b10000000
-
-
-############################################################################
-
-	# FIXME: tristate mux handling
-
-	if TRISTATE == 1:
-		pass
-	else:
-		@always_comb
-		def select_sfrdata():
-			if int_addra == 0b11010000:
-				sfr_rdata.next = concat(psw, psw0)
-			elif int_addra == 0b11100000:
-				sfr_rdata.next = acc
-			elif int_addra == 0b11110000:
-				sfr_rdata.next = b
-			elif int_addra == 0b10000001:
-				sfr_rdata.next = sp
-			elif int_addra == 0b10000100:
-				if SECONDDPTR:
-					if inc_dptr == True:
-						if next_dps == True:
-							sfr_rdata.next = dptr_inc[8:]
+		@always(fcycle, icall, inst, inst1, inst2, int_addra_r, last, mem_b, old_mem_b, psw, rom_data, ready, sp, sfr_wr_i, res_bus)
+		def proc_1576():	
+			# async mux statements:		   
+			int_addra.next = Undefined8
+			int_addrb.next = concat("000", psw[4+1:3], "00", inst[0])
+			rd_flag.next = False
+			rd_sfr_flag.next = False
+			if (inst[3+1:0] == 0b0000)	|  (inst[3+1:0] == 0b0010):		   
+				if (inst[3+1:0] == 0b0000)	|  ((inst[3+1:0] == 0b0010) & ((inst[7] == True) | (inst[6+1:4] == 0b111))):			
+					if inst1[7]  ==  False:				   
+						int_addra.next = concat("0010", inst1[6+1:3])
 					else:
-						sfr_rdata.next = dpl1
+						int_addra.next = concat(True, inst1[6+1:3], "000")
+				else:
+					int_addra.next = inst1
+				if (inst == 0b00010010)  |	(icall == True):			
+					if fcycle  ==  0b01:				
+						int_addra.next = sp + 1
+					else:
+						int_addra.next = sp + 2
+				if inst  ==  0b11000000:			
+					if fcycle  ==  0b10:				
+						int_addra.next = sp
+					else:
+						int_addra.next = inst1
+				if inst  ==  0b11010000:			
+					if fcycle  ==  0b10:				
+						int_addra.next = inst1
+					else:
+						int_addra.next = sp
+				if (inst[7+1:5] == 0b001)  &  (inst[3+1:0] == 0b0010):			  
+					int_addra.next = sp
+					int_addrb.next = (sp - 1)
+			elif inst[4+1:0]  ==  0b10001:		  
+				if fcycle  ==  0b01:			
+					int_addra.next = (sp + 1)
+				else:
+					int_addra.next = (sp + 2)
+			elif inst[3+1:0]  ==  0b0011:		 
+				int_addra.next = inst1
+			elif inst[3+1:0]  ==  0b0100:		 
+				pass		
+			elif inst[3+1:0]  ==  0b0101:		 
+				if (inst[7+1:4] == 0b1000)	&  (fcycle == 0b11):			
+					int_addra.next = inst2
+				else:
+					int_addra.next = inst1
+			elif inst[3+1:1]  ==  0b011:		
+				if fcycle[1+1:0]  ==  0b01:			   
+					int_addra.next = mem_b
+				else:
+					int_addra.next = old_mem_b
+				if (inst[7+1:4] == 0b1000)	&  (fcycle == 0b10):			
+					int_addra.next = inst1
+				if (inst[7+1:4] == 0b1010)	&  (fcycle == 0b01):			
+					int_addra.next = rom_data
+					rd_flag.next = True
+			elif inst[3]  ==  True:		   
+				int_addra.next = concat("000", psw[4+1:3], inst[2+1:0])
+				if (inst[7+1:4] == 0b1000)	&  (fcycle == 0b10):			
+					int_addra.next = inst1
+				if (inst[7+1:4] == 0b1010)	&  (fcycle == 0b01):			
+					int_addra.next = rom_data
+					rd_flag.next = True
+			if ((inst[7+1:5] != 0b001) | (inst[3+1:0] != 0b0010))  &  ((((rom_data[3+1:1] == 0b011) | (inst[3+1:1] == 0b011)) | (rom_data[7+1:1] == 0b1110001)) | (rom_data[7+1:1] == 0b1111001)):		  
+				if last  ==  True:			  
+					int_addrb.next = concat("000", psw[4+1:3], "00", rom_data[0])
+					if ( FAST_CPU_C != 0 and (sfr_wr_i == True))  &  (int_addra_r == 0b11010000):				 
+						int_addrb.next = concat("000", res_bus[4+1:3], "00", rom_data[0])
+				rd_sfr_flag.next = True
+			if ready  ==  False:		
+				int_addra.next = int_addra_r
 
-			elif int_addra == 0b10000101:
-				if SECONDDPTR:
+		@always(sfr_rdata_r, amux_sfr, mem_a)
+		def select_op_a():	 
+			# ternary:		  
+			if amux_sfr  ==  True:		  
+				op_a.next = sfr_rdata_r
+			else:
+				op_a.next = mem_a
+
+		@always(inst2, bmux_inst2, inst1)
+		def select_op_b():	 
+			# ternary:		  
+			if bmux_inst2  ==  True:		
+				op_b.next = inst2
+			else:
+				op_b.next = inst1
+
+		@always(pcc, rmux_pcl, pcc, rmux_pch, res_bus)
+		def select_mem_din():	 
+			# ternary:		  
+			if rmux_pcl  ==  True:		  
+				mem_din.next = pcc[7+1:0]
+			elif rmux_pch  ==  True:		
+				mem_din.next = pcc[15+1:8]
+			else:
+				mem_din.next = res_bus
+
+		@always(clk.posedge)
+		def sfr_worker():	
+			amux_sfr.next = False
+			bmux_inst2.next = False
+			rmux_pcl.next = False
+			rmux_pch.next = False
+			if int_addra[7]  ==  True:			  
+				amux_sfr.next = True
+			if inst[3+1:1]	==	0b011:			  
+				if inst[8:4] != 0b1010:
+					amux_sfr.next = False
+			if inst  ==  0b11010000:			
+				amux_sfr.next = False
+			if (inst[3+1:0] == 0b0011)	|  (inst[3+1:0] == 0b0101):			   
+				bmux_inst2.next = True
+			if ((inst == 0b00010010) | (inst[4+1:0] == 0b10001))  |  (icall == True):			 
+				if fcycle  ==  0b01:				
+					rmux_pcl.next = True
+				elif fcycle  ==  0b10:				  
+					rmux_pch.next = True
+				else:
+					# FIXME: Uncovered
+					pass
+		   
+		@always(last, mcode, int_addra, inst, inst, inst)
+		def select_sfr_rd():	 
+			# ternary:		  
+			if ((((last == True) & (mcode[3] == True)) & (int_addra[7] == True)) & ((inst[7+1:4] == 0b1000) | (inst[3+1:1] != 0b011)))	&  (inst != 0b11000000):		
+				sfr_rd_rmw.next = True
+			else:
+				sfr_rd_rmw.next = False
+
+		@always(last, mcode, int_addra, inst, inst, inst)
+		def select_next_memwr():	 
+			# ternary:		  
+			if ((last == True) & (mcode[3] == True))  &  (((int_addra[7] == False) | ((inst[7+1:4] != 0b1000) & (inst[3+1:1] == 0b011))) | (inst == 0b11000000)):		 
+				next_mem_wr.next = True
+			else:
+				next_mem_wr.next = False
+
+		@always(clk.posedge)
+		def select_memwr():	
+			sfr_wr_i.next = False
+			mem_wr.next = False
+			if (last == True)  &  (mcode[3] == True):			 
+				if ((int_addra[7] == True) & ((inst[7+1:4] == 0b1000) | (inst[3+1:1] != 0b011)))  &  (inst != 0b11000000):				  
+					if inst  ==  0b00010000:					
+						sfr_wr_i.next = j_skip
+					else:
+						sfr_wr_i.next = True
+				else:
+					mem_wr.next = True
+			if (iready == True)  &	(((inst == 0b00010010) | (inst[4+1:0] == 0b10001)) | (icall == True)):			  
+				if fcycle  !=  0b11:				
+					mem_wr.next = True
+
+		@always(inst, next_mem_wr, int_addra, psw, rom_data)
+		def select_ri_stall():	 
+			# ternary:		  
+			if ((inst != 0b00000000) & (next_mem_wr == True))  &  ((int_addra == concat("000", psw[4+1:3], "00", rom_data[0])) & (((rom_data[3+1:1] == 0b011) | (rom_data[7+1:1] == 0b1110001)) | (rom_data[7+1:1] == 0b1111001))):		   
+				ri_stall.next = True
+			else:
+				ri_stall.next = False
+
+		@always(int_addra, next_mem_wr, rom_data, rom_data, last, mcode)
+		def select_psw_stall():	 
+			# ternary:		  
+			if ((((int_addra == 0b11010000) & (next_mem_wr == False)) & ((rom_data[3+1:1] == 0b011) | (rom_data[3] == True))) & (last == True))  &	(mcode[3] == True):		   
+				psw_stall.next = True
+			else:
+				psw_stall.next = False
+
+		@always(rom_data, last, mcode)
+		def select_acc_stall():	 
+			# ternary:		  
+			if ((rom_data == 0b01110011) & (last == True))	&  (mcode[2] == True):		  
+				acc_stall.next = True
+			else:
+				acc_stall.next = False
+
+		@always(last, mcode, int_addra, inst, rom_data, rom_data, istart)
+		def select_spstall():	 
+			# ternary:		  
+			if (((((last == True) & (mcode[3] == True)) & (int_addra == 0b10000001)) & ((inst[7+1:4] == 0b1000) | (inst[3+1:1] != 0b011))) & (inst != 0b11000000))	&  (((rom_data == 0b00010010) | (rom_data[4+1:0] == 0b10001)) | (istart == True)):		  
+				sp_stall.next = True
+			else:
+				sp_stall.next = False
+
+		@always(last, inst, rom_data, rom_data, rom_data)
+		def select_movx():	 
+			# ternary:		  
+			if ((((((last == True) & (inst[7+1:5] == 0b111)) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01)) & (rom_data[7+1:5] == 0b111)) & (rom_data[3+1:2] == 0b00))  &  (rom_data[1+1:0] != 0b01):		
+				movx_stall.next = True
+			else:
+				movx_stall.next = False
+
+
+		bitnr_v = rom_data[2+1:0]
+
+		@always_seq(clk.posedge, rst_n)
+		def select_inst1():	
+			rst_r_n.next = True
+			if iready  ==  False:			 
+				pass			
+			elif (((rst_r_n == False) | (inst_skip == True)) | (istart == True))  |  (stall_pipe == True):			  
+				inst.next = 0
+			elif (inst == 0b10000100)  &  (pcpause == True):			
+				pass			
+			else:
+				if last  ==  True:				  
+					inst.next = rom_data
+				if fcycle  ==  0b01:				
+					inst1.next = rom_data
+				if fcycle  ==  0b10:				
+					inst2.next = rom_data
+			if fcycle  ==  0b01:			
+				if bitnr_v == 0:
+					bit_pattern.next = 0b00000001
+				elif bitnr_v == 1:
+					bit_pattern.next = 0b00000010
+				elif bitnr_v == 2:
+					bit_pattern.next = 0b00000100
+				elif bitnr_v == 3:
+					bit_pattern.next = 0b00001000
+				elif bitnr_v == 4:
+					bit_pattern.next = 0b00010000
+				elif bitnr_v == 5:
+					bit_pattern.next = 0b00100000
+				elif bitnr_v == 6:
+					bit_pattern.next = 0b01000000
+				else:
+				#elif bitnr_v == 7:
+					bit_pattern.next = 0b10000000
+
+
+	############################################################################
+
+		# FIXME: tristate mux handling
+
+		if TRISTATE == 1:
+			pass
+		else:
+			@always_comb
+			def select_sfrdata():
+				if int_addra == 0b11010000:
+					sfr_rdata.next = concat(psw, psw0)
+				elif int_addra == 0b11100000:
+					sfr_rdata.next = acc
+				elif int_addra == 0b11110000:
+					sfr_rdata.next = b
+				elif int_addra == 0b10000001:
+					sfr_rdata.next = sp
+				elif int_addra == 0b10000100:
+					if SECONDDPTR:
+						if inc_dptr == True:
+							if next_dps == True:
+								sfr_rdata.next = dptr_inc[8:]
+						else:
+							sfr_rdata.next = dpl1
+
+				elif int_addra == 0b10000101:
+					if SECONDDPTR:
+						if inc_dptr == True:
+							if next_dps == True:
+								sfr_rdata.next = dptr_inc[16:8]
+						else:
+							sfr_rdata.next = dph1
+
+				elif int_addra == 0b10000010:
 					if inc_dptr == True:
-						if next_dps == True:
+						if next_dps == False:
 							sfr_rdata.next = dptr_inc[16:8]
 					else:
-						sfr_rdata.next = dph1
+						sfr_rdata.next = dpl0
 
-			elif int_addra == 0b10000010:
-				if inc_dptr == True:
-					if next_dps == False:
+				elif int_addra == 0b10000011:
+					if inc_dptr == True and next_dps == False:
 						sfr_rdata.next = dptr_inc[16:8]
-				else:
-					sfr_rdata.next = dpl0
+					else:
+						sfr_rdata.next = dph0
 
-			elif int_addra == 0b10000011:
-				if inc_dptr == True and next_dps == False:
-					sfr_rdata.next = dptr_inc[16:8]
-				else:
-					sfr_rdata.next = dph0
-
-			elif int_addra == 0b10000110:
-				if SECONDDPTR and inc_dptr:
-					sfr_rdata.next = concat("0000000", dps)
-			
-			elif int_addra == 0b10111000:
-				sfr_rdata.next = ip
-			else:
-				sfr_rdata.next = sfr_rdata_in
-
-
+				elif int_addra == 0b10000110:
+					if SECONDDPTR and inc_dptr:
+						sfr_rdata.next = concat("0000000", dps)
 				
-
-				 
- 
-
-	@always(res_bus, sfr_wr_i, int_addra_r, status_d, status_wr, psw)
-	def select_psw7():	 
-		# ternary:		  
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b11010000):		  
-			next_psw7.next = res_bus[7]
-		elif status_wr[7-5]  ==  True:		  
-			next_psw7.next = status_d[7-5]
-		else:
-			next_psw7.next = psw_bits[6]
-
-	@always(acc_q, acc_wr, acc)
-	def select_next_acc_z():	 
-		# ternary:		  
-		if (acc_q == 0b00000000)  &  (acc_wr == True):		  
-			next_acc_z.next = True
-		elif acc  ==  0b00000000:		 
-			next_acc_z.next = True
-		else:
-			next_acc_z.next = False
-
-	@always_seq(clk.posedge, rst_n)
-	def select_acc():	
-		if acc_wr  ==  True:			
-			acc.next = acc_q
-		if b_wr  ==  True:			  
-			b.next = b_q
-		if ((mcode[2] & last) == True)	|  ((inst == 0b10000100) & (pcpause == False)):			   
-			acc_wr.next = True
-		else:
-			acc_wr.next = False
-		if (((inst == 0b10000100) & (pcpause == False)) | (inst == 0b10100100))  &	(last == True):			   
-			b_wr.next = True
-		else:
-			b_wr.next = False
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b11100000):			  
-			acc.next = res_bus
-		if ram_rd_i  ==  True:			  
-			acc.next = ram_rdata
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b11110000):			  
-			b.next = res_bus
-		if (inst[7+1:5] == 0b100)  &  (inst[3+1:0] == 0b0011):			  
-			if fcycle  ==  0b11:				
-				acc.next = rom_data
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b11010000):			  
-			psw_bits[6].next = res_bus[7]
-			psw_bits[5].next = res_bus[6]
-			psw_bits[4].next = res_bus[5]
-			psw_bits[3].next = res_bus[4]
-			psw_bits[2].next = res_bus[3]
-			psw_bits[1].next = res_bus[2]
-			psw_bits[0].next = res_bus[1]
-		if status_wr[7-5]  ==  True:			
-			psw_bits[6].next = status_d[7-5]
-		if status_wr[6-5]  ==  True:			
-			psw_bits[5].next = status_d[6-5]
-		if status_wr[5-5]  ==  True:			
-			psw_bits[1].next = status_d[5-5]
-
-	@always_seq(clk.posedge, rst_n)
-	def select_sp():	
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b10000001):			  
-			sp.next = res_bus
-		if iready  ==  True:			
-			if (inst[7+1:5] == 0b001)  &  (inst[3+1:0] == 0b0010):				  
-				sp.next = (sp - 2)
-			if (((inst == 0b00010010) | (inst[4+1:0] == 0b10001)) | (icall == True))  &  (last == True):				
-				sp.next = (sp + 2)
-			if (inst == 0b11000000)  &	(pcpaused[0] == True):				  
-				sp.next = (sp + 1)
-			if (inst == 0b11010000)  &	(last == True):				   
-				sp.next = (sp - 1)
+				elif int_addra == 0b10111000:
+					sfr_rdata.next = ip
+				else:
+					sfr_rdata.next = sfr_rdata_in
 
 
-	if SECONDDPTR:
-		@always_comb
-		def dptr_worker():
-			if int_addra_r == 0xb10000110 and sfr_wr_i == True:
-				next_dps.next = res_bus[0]
+					
+		@always(res_bus, sfr_wr_i, int_addra_r, status_d, status_wr, psw)
+		def select_psw7():	 
+			# ternary:		  
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b11010000):		  
+				next_psw7.next = res_bus[7]
+			elif status_wr.CY  ==  True:		  
+				next_psw7.next = status_d.CY
 			else:
-				next_dps.next = dps
+				next_psw7.next = psw_bits[6]
 
-				
-		@always_comb
-		def dplh_sel():
-			if next_dps:
-				dpl.next = dpl1
-				dph.next = dph1
+		@always(acc_q, acc_wr, acc)
+		def select_next_acc_z():	 
+			# ternary:		  
+			if (acc_q == 0b00000000)  &  (acc_wr == True):		  
+				next_acc_z.next = True
+			elif acc  ==  0b00000000:		 
+				next_acc_z.next = True
 			else:
-				dpl.next = dpl0
-				dph.next = dph0
+				next_acc_z.next = False
+
+		@always_seq(clk.posedge, rst_n)
+		def select_acc():	
+			if acc_wr  ==  True:			
+				acc.next = acc_q
+			if b_wr  ==  True:			  
+				b.next = b_q
+			if ((mcode[2] & last) == True)	|  ((inst == 0b10000100) & (pcpause == False)):			   
+				acc_wr.next = True
+			else:
+				acc_wr.next = False
+			if (((inst == 0b10000100) & (pcpause == False)) | (inst == 0b10100100))  &	(last == True):			   
+				b_wr.next = True
+			else:
+				b_wr.next = False
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b11100000):			  
+				acc.next = res_bus
+			if ram_rd_i  ==  True:			  
+				acc.next = ram_rdata
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b11110000):			  
+				b.next = res_bus
+			if (inst[7+1:5] == 0b100)  &  (inst[3+1:0] == 0b0011):			  
+				if fcycle  ==  0b11:				
+					acc.next = rom_data
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b11010000):			  
+				psw_bits[6].next = res_bus[7]
+				psw_bits[5].next = res_bus[6]
+				psw_bits[4].next = res_bus[5]
+				psw_bits[3].next = res_bus[4]
+				psw_bits[2].next = res_bus[3]
+				psw_bits[1].next = res_bus[2]
+				psw_bits[0].next = res_bus[1]
+			if status_wr.CY  ==  True:			
+				psw_bits[6].next = status_d.CY
+			if status_wr.AC  ==  True:			
+				psw_bits[5].next = status_d.AC
+			if status_wr.OV  ==  True:			
+				psw_bits[1].next = status_d.OV
+
+		@always_seq(clk.posedge, rst_n)
+		def select_sp():	
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000001):			  
+				sp.next = res_bus
+			if iready  ==  True:			
+				if (inst[7+1:5] == 0b001)  &  (inst[3+1:0] == 0b0010):				  
+					sp.next = (sp - 2)
+				if (((inst == 0b00010010) | (inst[4+1:0] == 0b10001)) | (icall == True))  &  (last == True):				
+					sp.next = (sp + 2)
+				if (inst == 0b11000000)  &	(pcpaused[0] == True):				  
+					sp.next = (sp + 1)
+				if (inst == 0b11010000)  &	(last == True):				   
+					sp.next = (sp - 1)
 
 
-	else:
-		dpl_wiring = [
-			dpl.wireup(dpl0),
-			dph.wireup(dph0),
-			next_dps.wireup(False), # Static
-		]
+		if SECONDDPTR:
+			@always_comb
+			def dptr_worker():
+				if int_addra_r == 0xb10000110 and sfr_wr_i == True:
+					next_dps.next = res_bus[0]
+				else:
+					next_dps.next = dps
 
+					
+			@always_comb
+			def dplh_sel():
+				if next_dps:
+					dpl.next = dpl1
+					dph.next = dph1
+				else:
+					dpl.next = dpl0
+					dph.next = dph0
 
-	@always(dph, dpl, inc_dptr, dptr_inc, inst, int_addra_r, mem_b, p2r, res_bus, sfr_wr_i, dps)
-	def select_ramaddr():	
-		# default:
-		ram_addr_p[1].next = dph
-		ram_addr_p[0].next = dpl
-		if inst[1]	==	False:		  
-			if (((sfr_wr_i == True) & (int_addra_r == 0b10000010)) & (dps == False))  |  ((((SECONDDPTR == True) & (sfr_wr_i == True)) & (int_addra_r == 0b10000100)) & (dps == True)):			
-				ram_addr_p[0].next = res_bus
-			if (((sfr_wr_i == True) & (int_addra_r == 0b10000011)) & (dps == False))  |  ((((SECONDDPTR == True) & (sfr_wr_i == True)) & (int_addra_r == 0b10000101)) & (dps == True)):			
-				ram_addr_p[1].next = res_bus
-			if inc_dptr  ==  True:			  
-				ram_addr_p[1].next = dptr_inc[16:8]
-				ram_addr_p[0].next = dptr_inc[8:0]
 
 		else:
-			ram_addr_p[1].next = p2r
-			ram_addr_p[0].next = mem_b
-
-			if (sfr_wr_i == True)  &  (int_addra_r == 0b10100000):			  
-				ram_addr_p[1].next = res_bus
-
-	@always(inst, inst, inst, pcpaused)
-	def select_ramc():	 
-		# ternary:		  
-		if (((inst[7+1:5] == 0b111) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01))  &  (pcpaused[0] == False):		 
-			ramc.next = True
-		else:
-			ramc.next = False
+			dpl_wiring = [
+				dpl.wireup(dpl0),
+				dph.wireup(dph0),
+				next_dps.wireup(False), # Static
+			]
 
 
-	if T8032 == False:		
-		ram_rd_wiring = [
-			ram_rd.set(ram_rd_i & ramc)
-		]
-	else:
-		ram_rd_wiring = [
-			ram_rd.set(ram_rd_i)
-		]
+		@always(dph, dpl, inc_dptr, dptr_inc, inst, int_addra_r, mem_b, p2r, res_bus, sfr_wr_i, dps)
+		def select_ramaddr():	
+			# default:
+			ram_addr_p[1].next = dph
+			ram_addr_p[0].next = dpl
+			if inst[1]	==	False:		  
+				if (((sfr_wr_i == True) & (int_addra_r == 0b10000010)) & (dps == False))  |  ((((SECONDDPTR == True) & (sfr_wr_i == True)) & (int_addra_r == 0b10000100)) & (dps == True)):			
+					ram_addr_p[0].next = res_bus
+				if (((sfr_wr_i == True) & (int_addra_r == 0b10000011)) & (dps == False))  |  ((((SECONDDPTR == True) & (sfr_wr_i == True)) & (int_addra_r == 0b10000101)) & (dps == True)):			
+					ram_addr_p[1].next = res_bus
+				if inc_dptr  ==  True:			  
+					ram_addr_p[1].next = dptr_inc[16:8]
+					ram_addr_p[0].next = dptr_inc[8:0]
 
-	@always(acc_wr, ram_rd_i, sfr_wr_i, int_addra_r)
-	def select_acc_wr():	 
-		# ternary:		  
-		if ((acc_wr | ram_rd_i) == True)  |  ((sfr_wr_i == True) & (int_addra_r == 0b11100000)):		
-			do_acc_wr.next = True
-		else:
-			do_acc_wr.next = False
-
-############################################################################
-# HAZARD HANDLING
-
-	if FAST_CPU_C:
-		"""Original code states that this is not fully tested"""
-		@always_comb
-		def fast_xxx_sel():
-			if ((sfr_wr_i & rd_flag) == True and int_addra_r == int_addra) \
-				or ((do_acc_wr & rd_flag) == True \
-					and int_addra == 0b11010000) \
-				or ((b_wr & rd_flag) == True and int_addra == 0b11110000) \
-				or (status_wr!=0 and rd_flag == True \
-					and int_addra== 0b11010000) \
-				or (T8032 == False and inst[8:2] == 0b111000 
-					and inst[2:0] != 0b01 and ramc_r==False):
-
-				xxx_flag.next = True
 			else:
-				xxx_flag.next = False
+				ram_addr_p[1].next = p2r
+				ram_addr_p[0].next = mem_b
 
+				if (sfr_wr_i == True)  &  (int_addra_r == 0b10100000):			  
+					ram_addr_p[1].next = res_bus
 
-	else:
-		@always_comb
-		def slow_xxx_sel():
-			if (rd_flag == True and rd_flag_r == False) \
-				or (rd_sfr_flag == True and sfr_wr_i == True \
-					and int_addra_r == 0b11010000) \
-				or (T8032 == False and inst[8:2] == 0b111000 
-					and inst[2:0] != 0b01 and ramc_r==False) \
-				or (T8032 == False and ram_wr_i == True and ramrw_r == False 
-					and DUALBUS == 0):
-				xxx_flag.next = True
+		@always(inst, inst, inst, pcpaused)
+		def select_ramc():	 
+			# ternary:		  
+			if (((inst[7+1:5] == 0b111) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01))  &  (pcpaused[0] == False):		 
+				ramc.next = True
 			else:
-				xxx_flag.next = False
+				ramc.next = False
+
+
+		if T8032 == False:		
+			ram_rd_wiring = [
+				ram_rd.set(ram_rd_i & ramc)
+			]
+		else:
+			ram_rd_wiring = [
+				ram_rd.set(ram_rd_i)
+			]
+
+		@always(acc_wr, ram_rd_i, sfr_wr_i, int_addra_r)
+		def select_acc_wr():	 
+			# ternary:		  
+			if ((acc_wr | ram_rd_i) == True)  |  ((sfr_wr_i == True) & (int_addra_r == 0b11100000)):		
+				do_acc_wr.next = True
+			else:
+				do_acc_wr.next = False
+
+	############################################################################
+	# HAZARD HANDLING
+
+		if FAST_CPU_C:
+			"""Original code states that this is not fully tested"""
+			@always_comb
+			def fast_xxx_sel():
+				if ((sfr_wr_i & rd_flag) == True and int_addra_r == int_addra) \
+					or ((do_acc_wr & rd_flag) == True \
+						and int_addra == 0b11010000) \
+					or ((b_wr & rd_flag) == True and int_addra == 0b11110000) \
+					or (status_wr!=0 and rd_flag == True \
+						and int_addra== 0b11010000) \
+					or (T8032 == False and inst[8:2] == 0b111000 
+						and inst[2:0] != 0b01 and ramc_r==False):
+
+					xxx_flag.next = True
+				else:
+					xxx_flag.next = False
+
+
+		else:
+			@always_comb
+			def slow_xxx_sel():
+				if (rd_flag == True and rd_flag_r == False) \
+					or (rd_sfr_flag == True and sfr_wr_i == True \
+						and int_addra_r == 0b11010000) \
+					or (T8032 == False and inst[8:2] == 0b111000 
+						and inst[2:0] != 0b01 and ramc_r==False) \
+					or (T8032 == False and ram_wr_i == True and ramrw_r == False 
+						and DUALBUS == 0):
+					xxx_flag.next = True
+				else:
+					xxx_flag.next = False
+
+
+			@always_seq(clk.posedge, rst_n)
+			def rd_register():
+				rd_flag_r.next = rd_flag
+
+		
+		if T8032:
+			t_ready = True
+		else:
+			t_ready = ready
 
 
 		@always_seq(clk.posedge, rst_n)
-		def rd_register():
-			rd_flag_r.next = rd_flag
-
-	
-	if T8032:
-		t_ready = True
-	else:
-		t_ready = ready
-
-
-	@always_seq(clk.posedge, rst_n)
-	def dptr_worker():	
-		if ready  ==  True:			   
-			ramc_r.next = ramc
-			ramrw_r.next = ((ram_rd_i & ramc) | ram_wr_i)
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b10100000):			  
-			p2r.next = res_bus
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b10000010):			  
-			dpl0.next = res_bus
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b10000011):			  
-			dph0.next = res_bus
-		if SECONDDPTR:
-			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000100):				  
-				dpl1.next = res_bus
-			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000101):				  
-				dph1.next = res_bus
-			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000110):				  
-				dps_r.next = res_bus[0]
-		if iready  ==  True:			
-			if (SECONDDPTR == False)  |  ((SECONDDPTR == True) & (dps == False)):				  
-				if (inst == 0b10010000)  &	(fcycle == 0b10):					 
-					dph0.next = inst1
-				if (inst == 0b10010000)  &	(fcycle == 0b11):					 
-					dpl0.next = inst2
-				if inc_dptr  ==  True:					  
-					dph0.next = dptr_inc[15+1:8]
-					dpl0.next = dptr_inc[7+1:0]
-			elif (SECONDDPTR == True)	&  (dps == True):				 
-				if (inst == 0b10010000)  &	(fcycle == 0b10):					 
-					dph1.next = inst1
-				if (inst == 0b10010000)  &	(fcycle == 0b11):					 
-					dpl1.next = inst2
-				if inc_dptr  ==  True:					  
-					dph1.next = dptr_inc[15+1:8]
-					dpl1.next = dptr_inc[7+1:0]
-			inc_dptr.next = False
-			if inst  ==  0b10100011:				
-				inc_dptr.next = True
+		def dptr_worker():	
+			if ready  ==  True:			   
+				ramc_r.next = ramc
+				ramrw_r.next = ((ram_rd_i & ramc) | ram_wr_i)
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b10100000):			  
+				p2r.next = res_bus
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000010):			  
+				dpl0.next = res_bus
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b10000011):			  
+				dph0.next = res_bus
+			if SECONDDPTR:
+				if (sfr_wr_i == True)  &  (int_addra_r == 0b10000100):				  
+					dpl1.next = res_bus
+				if (sfr_wr_i == True)  &  (int_addra_r == 0b10000101):				  
+					dph1.next = res_bus
+				if (sfr_wr_i == True)  &  (int_addra_r == 0b10000110):				  
+					dps_r.next = res_bus[0]
+			if iready  ==  True:			
+				if (SECONDDPTR == False)  |  ((SECONDDPTR == True) & (dps == False)):				  
+					if (inst == 0b10010000)  &	(fcycle == 0b10):					 
+						dph0.next = inst1
+					if (inst == 0b10010000)  &	(fcycle == 0b11):					 
+						dpl0.next = inst2
+					if inc_dptr  ==  True:					  
+						dph0.next = dptr_inc[15+1:8]
+						dpl0.next = dptr_inc[7+1:0]
+				elif (SECONDDPTR == True)	&  (dps == True):				 
+					if (inst == 0b10010000)  &	(fcycle == 0b10):					 
+						dph1.next = inst1
+					if (inst == 0b10010000)  &	(fcycle == 0b11):					 
+						dpl1.next = inst2
+					if inc_dptr  ==  True:					  
+						dph1.next = dptr_inc[15+1:8]
+						dpl1.next = dptr_inc[7+1:0]
+				inc_dptr.next = False
+				if inst  ==  0b10100011:				
+					inc_dptr.next = True
 
 
-		if t_ready:			
-			ram_wr_i.next = False
-			if T8032  ==  0:				
-				if (inst[7+1:2] == 0b111100)  &  (inst[1+1:0] != 0b01):					   
+			if t_ready:			
+				ram_wr_i.next = False
+				if T8032  ==  0:				
+					if (inst[7+1:2] == 0b111100)  &  (inst[1+1:0] != 0b01):					   
+						ram_wr_i.next = True
+				elif (((inst[7+1:2] == 0b111100) & (inst[1+1:0] != 0b01)) & (DUALBUS != 0))  |	((((inst[7+1:2] == 0b111100) & (inst[1+1:0] != 0b01)) & (iready == False)) & (DUALBUS == 0)):				 
 					ram_wr_i.next = True
-			elif (((inst[7+1:2] == 0b111100) & (inst[1+1:0] != 0b01)) & (DUALBUS != 0))  |	((((inst[7+1:2] == 0b111100) & (inst[1+1:0] != 0b01)) & (iready == False)) & (DUALBUS == 0)):				 
-				ram_wr_i.next = True
-			ram_rd_i.next = False
-			if (inst[7+1:2] == 0b111000)  &  (inst[1+1:0] != 0b01):				   
-				ram_rd_i.next = True
+				ram_rd_i.next = False
+				if (inst[7+1:2] == 0b111000)  &  (inst[1+1:0] != 0b01):				   
+					ram_rd_i.next = True
 
 
-	dps_wirings = [
-		dps.wireup(dps_r if SECONDDPTR else False)
-	]
+		dps_wirings = [
+			dps.wireup(dps_r if SECONDDPTR else False)
+		]
 
-	@always_seq(clk.posedge, rst_n)
-	def irq_handle():	
-		if (sfr_wr_i == True)  &  (int_addra_r == 0b10111000):			  
-			ip.next = res_bus
-		if iready  ==  True:			
-			if ((((int_trig & ip[6+1:0]) != 0b0000000) & (hpint == False)) & (ipending == False))  &  (icall == False):				   
-				int_trig_r.next = (int_trig & ip[6+1:0])
-				ipending.next = True
-				hpint.next = True
-			elif ((((int_trig != 0b0000000) & (lpint == False)) & (hpint == False)) & (ipending == False))	&  (icall == False):				
-				ipending.next = True
-				int_trig_r.next = int_trig
-				lpint.next = True
-			if icall  ==  True:				   
-				ipending.next = False
-			if (istart == True)  &	(sp_stall == False):				
-				icall.next = True
-			if (icall == True)	&  (last == True):				  
-				icall.next = False
-				int_trig_r.next = 0
-			if (ipending == True)  &  (icall == True):				  
-				# Nicer when procedural:
-				if int_trig_r[0]  ==  True:					   
-					int_acc.next = 0b0000001
-				elif int_trig_r[1]	==	True:					 
-					int_acc.next = 0b0000010
-				elif int_trig_r[2]	==	True:					 
-					int_acc.next = 0b0000100
-				elif int_trig_r[3]	==	True:					 
-					int_acc.next = 0b0001000
-				elif int_trig_r[4]	==	True:					 
-					int_acc.next = 0b0010000
-				elif int_trig_r[5]	==	True:					 
-					int_acc.next = 0b0100000
-				elif int_trig_r[6]	==	True:					 
-					int_acc.next = 0b1000000
-			if inst  ==  0b00110010:				
-				if hpint  ==  False:					
-					lpint.next = False
+		@always_seq(clk.posedge, rst_n)
+		def irq_handle():	
+			if (sfr_wr_i == True)  &  (int_addra_r == 0b10111000):			  
+				ip.next = res_bus
+			if iready  ==  True:			
+				if ((((int_trig & ip[6+1:0]) != 0b0000000) & (hpint == False)) & (ipending == False))  &  (icall == False):				   
+					int_trig_r.next = (int_trig & ip[6+1:0])
+					ipending.next = True
+					hpint.next = True
+				elif ((((int_trig != 0b0000000) & (lpint == False)) & (hpint == False)) & (ipending == False))	&  (icall == False):				
+					ipending.next = True
+					int_trig_r.next = int_trig
+					lpint.next = True
+				if icall  ==  True:				   
+					ipending.next = False
+				if (istart == True)  &	(sp_stall == False):				
+					icall.next = True
+				if (icall == True)	&  (last == True):				  
+					icall.next = False
+					int_trig_r.next = 0
+				if (ipending == True)  &  (icall == True):				  
+					# Nicer when procedural:
+					if int_trig_r[0]  ==  True:					   
+						int_acc.next = 0b0000001
+					elif int_trig_r[1]	==	True:					 
+						int_acc.next = 0b0000010
+					elif int_trig_r[2]	==	True:					 
+						int_acc.next = 0b0000100
+					elif int_trig_r[3]	==	True:					 
+						int_acc.next = 0b0001000
+					elif int_trig_r[4]	==	True:					 
+						int_acc.next = 0b0010000
+					elif int_trig_r[5]	==	True:					 
+						int_acc.next = 0b0100000
+					elif int_trig_r[6]	==	True:					 
+						int_acc.next = 0b1000000
+				if inst  ==  0b00110010:				
+					if hpint  ==  False:					
+						lpint.next = False
+					else:
+						hpint.next = False
+
+		@always_seq(clk.posedge, rst_n)
+		def pc_advance():	
+			if iready  ==  True:			
+				pc.next = npc
+				ret_r.next = ret
+				if pcpause	==	True:				 
+					pcpaused.next = pcpaused + 1
 				else:
-					hpint.next = False
+					pcpaused.next = 0
+				if pcpause	==	False:				  
+					fcycle.next = fcycle + 1
+					if last  ==  True:					  
+						fcycle.next = 0b01
+				if (inst[7+1:5] == 0b100)  &  (inst[3+1:0] == 0b0011):				  
+					if fcycle  ==  0b01:					
+						opc.next = pc
 
-	@always_seq(clk.posedge, rst_n)
-	def pc_advance():	
-		if iready  ==  True:			
-			pc.next = npc
-			ret_r.next = ret
-			if pcpause	==	True:				 
-				pcpaused.next = pcpaused + 1
-			else:
-				pcpaused.next = 0
-			if pcpause	==	False:				  
-				fcycle.next = fcycle + 1
-				if last  ==  True:					  
-					fcycle.next = 0b01
-			if (inst[7+1:5] == 0b100)  &  (inst[3+1:0] == 0b0011):				  
-				if fcycle  ==  0b01:					
-					opc.next = pc
-
-	@always(acc, bit_pattern, cjne, djnz, dph, dpl, div_rdy, fcycle, icall, inst, inst1, inst2, int_trig_r, mem_a, mem_b, next_acc_z, next_psw7, opc, op_a, pc, pcpaused, ret_r, rom_data, iready, rst_r_n, stall_pipe, ram_rd_i, ram_wr_i, ramc)
-	def next_pc_select():	
-		# async mux statements:		   
-		npc.next = pc
-		j_skip.next = False
-		ret.next = False
-		pcpause.next = False
-		if ((((((inst[7+1:5] == 0b110) & (inst[3+1:0] == 0b0000)) & (fcycle == 0b01)) & (pcpaused[0] == False)) | (((((T8032 == 0) & (inst[7+1:2] == 0b111000)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0)) & (pcpaused[0] == False))) | ((((((T8032 != 0) & (inst[7+1:5] == 0b111)) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0)) & (pcpaused[0] == False)))	|  ((inst == 0b10000100) & ((pcpaused[3+1:1] == 0b000) | (div_rdy == False))):		  
-			pcpause.next = True
-		else:
-			if stall_pipe  ==  False:			 
-				npc.next = (pc + 1)
-		if ((((T8032 == 0) & (inst[7+1:2] == 0b111000)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0))	|  (((((T8032 != 0) & (inst[7+1:5] == 0b111)) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0)):		  
-			j_skip.next = True
-		if (inst[7+1:5] == 0b001)  &  (inst[3+1:0] == 0b0010):		  
-			ret.next = True
-			j_skip.next = True
-		if ((inst[7+1:5] == 0b100) & (inst[3+1:0] == 0b0011))  &  (fcycle == 0b11):		   
-			npc.next = opc
-			j_skip.next = True
-		if fcycle  ==  0b10:		
-			if ((((((inst == 0b01000000) & (next_psw7 == True)) | ((inst == 0b01010000) & (next_psw7 == False))) | ((inst == 0b01100000) & (next_acc_z == True))) | ((inst == 0b01110000) & (next_acc_z == False))) | ((inst[7+1:3] == 0b11011) & (djnz == True)))	|  (inst == 0b10000000):			
-				npc.next = (pc + inst1.signed())
-				j_skip.next = True
-		if fcycle  ==  0b11:		
-			if ((inst == 0b00100000) | (inst == 0b00010000))  &  ((bit_pattern & op_a) != 0b00000000):			  
-				npc.next = (pc + inst2.signed())
-				j_skip.next = True
-			if (inst == 0b00110000)  &	((bit_pattern & op_a) == 0b00000000):			 
-				npc.next = (pc + inst2.signed())
-				j_skip.next = True
-			if ((inst[7+1:4] == 0b1011) & (inst[3+1:2] != 0b00))  &  (cjne == True):			
-				npc.next = (pc + inst2.signed())
-				j_skip.next = True
-			if (inst == 0b11010101)  &	(djnz == True):			   
-				npc.next = (pc + inst2.signed())
-				j_skip.next = True
-		if fcycle  ==  0b10:		
-			if (inst[4+1:0] == 0b00001)  |	(inst[4+1:0] == 0b10001):
-				npc.next = concat(pc[15+1:11], inst[7+1:5], inst1)
-				j_skip.next = True
-		if fcycle  ==  0b10:		
-			if (inst == 0b00000010)  |	(inst == 0b00010010):			 
-				npc.next = concat(inst1, rom_data)
-			if icall  ==  True:			   
-				if int_trig_r[1]  ==  True:				   
-					npc.next = 0b001000
-				elif int_trig_r[2]	==	True:				 
-					npc.next = 0b010000
-				elif int_trig_r[3]	==	True:				 
-					npc.next = 0b011000
-				elif int_trig_r[4]	==	True:				 
-					npc.next = 0b100000
-				elif int_trig_r[5]	==	True:				 
-					npc.next = 0b101000
-				elif int_trig_r[6]	==	True:				 
-					npc.next = 0b110000
-		if inst  ==  0b01110011:		
-			npc.next = (concat(dph, dpl) + acc.signed())
-			j_skip.next = True
-		if (inst[7+1:5] == 0b100)  &  (inst[3+1:0] == 0b0011):		  
-			if fcycle  ==  0b10:			
-				if inst[4]	==	False:				  
-					npc.next = (acc + opc)
-				else:
-					npc.next = (acc + concat(dph, dpl))
-		if ret_r  ==  True:		   
-			npc.next = concat(mem_a, mem_b)
-		if iready  ==  False:		 
+		@always(acc, bit_pattern, cjne, djnz, dph, dpl, div_rdy, fcycle, icall, inst, inst1, inst2, int_trig_r, mem_a, mem_b, next_acc_z, next_psw7, opc, op_a, pc, pcpaused, ret_r, rom_data, iready, rst_r_n, stall_pipe, ram_rd_i, ram_wr_i, ramc)
+		def next_pc_select():	
+			# async mux statements:		   
 			npc.next = pc
-		if rst_r_n	==	False:		  
-			npc.next = 0
-
-	@always(clk.posedge)
-	def common_worker():	
-		old_mem_b.next = mem_b
-		if fcycle  ==  0b01:			
-			if inst[1]	==	True:				 
-				pcc.next = (pc + 2)
+			j_skip.next = False
+			ret.next = False
+			pcpause.next = False
+			if ((((((inst[7+1:5] == 0b110) & (inst[3+1:0] == 0b0000)) & (fcycle == 0b01)) & (pcpaused[0] == False)) | (((((T8032 == 0) & (inst[7+1:2] == 0b111000)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0)) & (pcpaused[0] == False))) | ((((((T8032 != 0) & (inst[7+1:5] == 0b111)) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0)) & (pcpaused[0] == False)))	|  ((inst == 0b10000100) & ((pcpaused[3+1:1] == 0b000) | (div_rdy == False))):		  
+				pcpause.next = True
 			else:
-				pcc.next = (pc + 1)
-			if icall  ==  True:				   
-				pcc.next = (pc - 1)
-		sfr_rdata_r.next = sfr_rdata
+				if stall_pipe  ==  False:			 
+					npc.next = (pc + 1)
+			if ((((T8032 == 0) & (inst[7+1:2] == 0b111000)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0))	|  (((((T8032 != 0) & (inst[7+1:5] == 0b111)) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01)) & (DUALBUS == 0)):		  
+				j_skip.next = True
+			if (inst[7+1:5] == 0b001)  &  (inst[3+1:0] == 0b0010):		  
+				ret.next = True
+				j_skip.next = True
+			if ((inst[7+1:5] == 0b100) & (inst[3+1:0] == 0b0011))  &  (fcycle == 0b11):		   
+				npc.next = opc
+				j_skip.next = True
+			if fcycle  ==  0b10:		
+				if ((((((inst == 0b01000000) & (next_psw7 == True)) | ((inst == 0b01010000) & (next_psw7 == False))) | ((inst == 0b01100000) & (next_acc_z == True))) | ((inst == 0b01110000) & (next_acc_z == False))) | ((inst[7+1:3] == 0b11011) & (djnz == True)))	|  (inst == 0b10000000):			
+					npc.next = (pc + inst1.signed())
+					j_skip.next = True
+			if fcycle  ==  0b11:		
+				if ((inst == 0b00100000) | (inst == 0b00010000))  &  ((bit_pattern & op_a) != 0b00000000):			  
+					npc.next = (pc + inst2.signed())
+					j_skip.next = True
+				if (inst == 0b00110000)  &	((bit_pattern & op_a) == 0b00000000):			 
+					npc.next = (pc + inst2.signed())
+					j_skip.next = True
+				if ((inst[7+1:4] == 0b1011) & (inst[3+1:2] != 0b00))  &  (cjne == True):			
+					npc.next = (pc + inst2.signed())
+					j_skip.next = True
+				if (inst == 0b11010101)  &	(djnz == True):			   
+					npc.next = (pc + inst2.signed())
+					j_skip.next = True
+			if fcycle  ==  0b10:		
+				if (inst[4+1:0] == 0b00001)  |	(inst[4+1:0] == 0b10001):
+					npc.next = concat(pc[15+1:11], inst[7+1:5], inst1)
+					j_skip.next = True
+			if fcycle  ==  0b10:		
+				if (inst == 0b00000010)  |	(inst == 0b00010010):			 
+					npc.next = concat(inst1, rom_data)
+				if icall  ==  True:			   
+					if int_trig_r[1]  ==  True:				   
+						npc.next = 0b001000
+					elif int_trig_r[2]	==	True:				 
+						npc.next = 0b010000
+					elif int_trig_r[3]	==	True:				 
+						npc.next = 0b011000
+					elif int_trig_r[4]	==	True:				 
+						npc.next = 0b100000
+					elif int_trig_r[5]	==	True:				 
+						npc.next = 0b101000
+					elif int_trig_r[6]	==	True:				 
+						npc.next = 0b110000
+			if inst  ==  0b01110011:		
+				npc.next = (concat(dph, dpl) + acc.signed())
+				j_skip.next = True
+			if (inst[7+1:5] == 0b100)  &  (inst[3+1:0] == 0b0011):		  
+				if fcycle  ==  0b10:			
+					if inst[4]	==	False:				  
+						npc.next = (acc + opc)
+					else:
+						npc.next = (acc + concat(dph, dpl))
+			if ret_r  ==  True:		   
+				npc.next = concat(mem_a, mem_b)
+			if iready  ==  False:		 
+				npc.next = pc
+			if rst_r_n	==	False:		  
+				npc.next = 0
 
-############################################################################	
-	# RAM instance:
+		@always(clk.posedge)
+		def common_worker():	
+			old_mem_b.next = mem_b
+			if fcycle  ==  0b01:			
+				if inst[1]	==	True:				 
+					pcc.next = (pc + 2)
+				else:
+					pcc.next = (pc + 1)
+				if icall  ==  True:				   
+					pcc.next = (pc - 1)
+			sfr_rdata_r.next = sfr_rdata
 
-	ram = work.t51_ram(
-		clk = clk,
-		rst_n = rst_n,
-		are = ready,
-		wr = mem_wr,
-		din = mem_din,
-		int_addra = int_addra,
-		int_addra_r = int_addra_r,
-		int_addrb = int_addrb,
-		mem_a = mem_a,
-		mem_b = mem_b
-	)
+	############################################################################	
+		# RAM instance:
 
-	@always(inst)
-	def select_mcode():	
-		# case sequence
-		if inst == 0b00000000: # case begin		   
-			mcode.next = 0b0001
-		elif inst == 0b00000001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b00000010: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b00000011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00000100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00000101: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b00000110: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00000111: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001000: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001001: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001010: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001011: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001100: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001101: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001110: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00001111: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00010000: # case		   
-			mcode.next = 0b1011
-		elif inst == 0b00010001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b00010010: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b00010011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00010100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00010101: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b00010110: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00010111: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011000: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011001: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011010: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011011: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011100: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011101: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011110: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00011111: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b00100000: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b00100001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b00100010: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b00100011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00100100: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b00100101: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b00100110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00100111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101001: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101101: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00101111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00110000: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b00110001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b00110010: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b00110011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00110100: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b00110101: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b00110110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00110111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111001: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111101: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b00111111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01000000: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01000001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01000010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01000011: # case		   
-			mcode.next = 0b1011
-		elif inst == 0b01000100: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b01000101: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b01000110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01000111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001001: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001101: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01001111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01010000: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01010001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01010010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01010011: # case		   
-			mcode.next = 0b1011
-		elif inst == 0b01010100: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b01010101: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b01010110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01010111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011001: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011101: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01011111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01100000: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01100001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01100010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01100011: # case		   
-			mcode.next = 0b1011
-		elif inst == 0b01100100: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b01100101: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b01100110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01100111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101001: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101101: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01101111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b01110000: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01110001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01110010: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b01110011: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b01110100: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b01110101: # case		   
-			mcode.next = 0b1011
-		elif inst == 0b01110110: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01110111: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111000: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111001: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111011: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111100: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111101: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111110: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b01111111: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10000000: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10000001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10000010: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10000011: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10000100: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b10000101: # case		   
-			mcode.next = 0b1011
-		elif inst == 0b10000110: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10000111: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001000: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001001: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001011: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001100: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001101: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001110: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10001111: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10010000: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10010001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10010010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10010011: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10010100: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b10010101: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b10010110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10010111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011001: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011101: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10011111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10100000: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10100001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10100010: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10100011: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b10100100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b10100101: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b10100110: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10100111: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101000: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101001: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101011: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101100: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101101: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101110: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10101111: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10110000: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10110001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b10110010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b10110011: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b10110100: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10110101: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10110110: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10110111: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111000: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111001: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111010: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111011: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111100: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111101: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111110: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b10111111: # case		   
-			mcode.next = 0b0011
-		elif inst == 0b11000000: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11000001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b11000010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11000011: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b11000100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11000101: # case		   
-			mcode.next = 0b1110
-		elif inst == 0b11000110: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11000111: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001000: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001001: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001010: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001011: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001100: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001101: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001110: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11001111: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11010000: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11010001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b11010010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11010011: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b11010100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11010101: # case		   
-			mcode.next = 0b1011
-		elif inst == 0b11010110: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11010111: # case		   
-			mcode.next = 0b1101
-		elif inst == 0b11011000: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11011001: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11011010: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11011011: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11011100: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11011101: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11011110: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11011111: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11100000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11100001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b11100010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11100011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11100100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11100101: # case		   
-			mcode.next = 0b0110
-		elif inst == 0b11100110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11100111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101000: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101001: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101010: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101011: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101101: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101110: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11101111: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11110000: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b11110001: # case		   
-			mcode.next = 0b0010
-		elif inst == 0b11110010: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b11110011: # case		   
-			mcode.next = 0b0001
-		elif inst == 0b11110100: # case		   
-			mcode.next = 0b0101
-		elif inst == 0b11110101: # case		   
-			mcode.next = 0b1010
-		elif inst == 0b11110110: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11110111: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111000: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111001: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111010: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111011: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111100: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111101: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111110: # case		   
-			mcode.next = 0b1001
-		elif inst == 0b11111111: # case		   
-			mcode.next = 0b1001
-		else:
-			pass		
+		ram = work.t51_ram(
+			clk = clk,
+			rst_n = rst_n,
+			are = ready,
+			wr = mem_wr,
+			din = mem_din,
+			int_addra = int_addra,
+			int_addra_r = int_addra_r,
+			int_addrb = int_addrb,
+			mem_a = mem_a,
+			mem_b = mem_b
+		)
+
+		@always(inst)
+		def select_mcode():	
+			# case sequence
+			if inst == 0b00000000: # case begin		   
+				mcode.next = 0b0001
+			elif inst == 0b00000001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b00000010: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b00000011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00000100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00000101: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b00000110: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00000111: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001000: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001001: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001010: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001011: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001100: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001101: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001110: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00001111: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00010000: # case		   
+				mcode.next = 0b1011
+			elif inst == 0b00010001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b00010010: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b00010011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00010100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00010101: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b00010110: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00010111: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011000: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011001: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011010: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011011: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011100: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011101: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011110: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00011111: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b00100000: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b00100001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b00100010: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b00100011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00100100: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b00100101: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b00100110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00100111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101001: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101101: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00101111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00110000: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b00110001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b00110010: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b00110011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00110100: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b00110101: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b00110110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00110111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111001: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111101: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b00111111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01000000: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01000001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01000010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01000011: # case		   
+				mcode.next = 0b1011
+			elif inst == 0b01000100: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b01000101: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b01000110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01000111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001001: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001101: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01001111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01010000: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01010001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01010010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01010011: # case		   
+				mcode.next = 0b1011
+			elif inst == 0b01010100: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b01010101: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b01010110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01010111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011001: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011101: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01011111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01100000: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01100001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01100010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01100011: # case		   
+				mcode.next = 0b1011
+			elif inst == 0b01100100: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b01100101: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b01100110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01100111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101001: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101101: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01101111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b01110000: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01110001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01110010: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b01110011: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b01110100: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b01110101: # case		   
+				mcode.next = 0b1011
+			elif inst == 0b01110110: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01110111: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111000: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111001: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111011: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111100: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111101: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111110: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b01111111: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10000000: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10000001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10000010: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10000011: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10000100: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b10000101: # case		   
+				mcode.next = 0b1011
+			elif inst == 0b10000110: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10000111: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001000: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001001: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001011: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001100: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001101: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001110: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10001111: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10010000: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10010001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10010010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10010011: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10010100: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b10010101: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b10010110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10010111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011001: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011101: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10011111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10100000: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10100001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10100010: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10100011: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b10100100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b10100101: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b10100110: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10100111: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101000: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101001: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101011: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101100: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101101: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101110: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10101111: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10110000: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10110001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b10110010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b10110011: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b10110100: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10110101: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10110110: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10110111: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111000: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111001: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111010: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111011: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111100: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111101: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111110: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b10111111: # case		   
+				mcode.next = 0b0011
+			elif inst == 0b11000000: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11000001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b11000010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11000011: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b11000100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11000101: # case		   
+				mcode.next = 0b1110
+			elif inst == 0b11000110: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11000111: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001000: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001001: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001010: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001011: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001100: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001101: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001110: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11001111: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11010000: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11010001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b11010010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11010011: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b11010100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11010101: # case		   
+				mcode.next = 0b1011
+			elif inst == 0b11010110: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11010111: # case		   
+				mcode.next = 0b1101
+			elif inst == 0b11011000: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11011001: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11011010: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11011011: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11011100: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11011101: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11011110: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11011111: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11100000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11100001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b11100010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11100011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11100100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11100101: # case		   
+				mcode.next = 0b0110
+			elif inst == 0b11100110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11100111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101000: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101001: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101010: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101011: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101101: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101110: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11101111: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11110000: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b11110001: # case		   
+				mcode.next = 0b0010
+			elif inst == 0b11110010: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b11110011: # case		   
+				mcode.next = 0b0001
+			elif inst == 0b11110100: # case		   
+				mcode.next = 0b0101
+			elif inst == 0b11110101: # case		   
+				mcode.next = 0b1010
+			elif inst == 0b11110110: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11110111: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111000: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111001: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111010: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111011: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111100: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111101: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111110: # case		   
+				mcode.next = 0b1001
+			elif inst == 0b11111111: # case		   
+				mcode.next = 0b1001
+			else:
+				pass		
+			
+
+
+		###### Wirings: ######
+		_wires_ = [
+			iready						 @assign@ ( (ready & ~xxx_flag) ),
+			ram_cycle					 @assign@ ( ramc ),
+			sfr_wr						 @assign@ ( sfr_wr_i ),
+			sfr_addr					 @assign@ ( int_addra[6+1:0] ),
+			sfr_wdata					 @assign@ ( res_bus ),
+			inst_skip					 @assign@ ( (ret_r | j_skip) ),
+			stall_pipe					 @assign@ ( (((((ri_stall | psw_stall) | acc_stall) | sp_stall) | movx_stall) & ~istart) ),
+			psw0						 @assign@ ( (((((((acc[7] ^ acc[6]) ^ acc[5]) ^ acc[4]) ^ acc[3]) ^ acc[2]) ^ acc[1]) ^ acc[0]) ),
+			ram_wdata					 @assign@ ( acc ),
+			ram_wr						 @assign@ ( ram_wr_i ),
+			dptr_inc					 @assign@ ( (concat(dph, dpl) + 1) ),
+			istart						 @assign@ ( ((last & ipending) & ~inst_skip) ),
+			rom_addr					 @assign@ ( npc ),
+			iram_wr						 @assign@ ( mem_wr ),
+			iram_addr					 @assign@ ( int_addra_r ),
+			iram_wdata					 @assign@ ( mem_din ),
+		]
+
+		cy_bits = [ Bool() for _ in range(2) ]
+		ac_bits = [ Bool() for _ in range(2) ]
+		ov_bits = [ Bool() for _ in range(2) ]
 		
+		 # instance 't51_alu'
+		alu = self.t51_alu(
+			TRISTATE = TRISTATE,
 
+			clk = clk,
+			last = last,
+			opcode = _SLV(inst),
+			acc = _SLV(acc),
+			b = _SLV(b),
+			ia = _SLV(op_a),
+			ib = _SLV(op_b),
+			bit_pattern = _SLV(bit_pattern),
+			cy_in = psw[6],
+			ac_in = psw[5],
+			acc_q = acc_q,
+			b_q = b_q,
+			idcpbl_q = res_bus_slv,
+			div_rdy = div_rdy,
+			cjne = cjne,
+			djnz = djnz,
+			cy_out = cy_bits[0],
+			ac_out = ac_bits[0],
+			ov_out = ov_bits[0],
+			cy_wr = cy_bits[1],
+			ac_wr = ac_bits[1],
+			ov_wr = ov_bits[1],
+		)
 
-	###### Wirings: ######
-	_wires_ = [
-		iready						 @assign@ ( (ready & ~xxx_flag) ),
-		ram_cycle					 @assign@ ( ramc ),
-		sfr_wr						 @assign@ ( sfr_wr_i ),
-		sfr_addr					 @assign@ ( int_addra[6+1:0] ),
-		sfr_wdata					 @assign@ ( res_bus ),
-		inst_skip					 @assign@ ( (ret_r | j_skip) ),
-		stall_pipe					 @assign@ ( (((((ri_stall | psw_stall) | acc_stall) | sp_stall) | movx_stall) & ~istart) ),
-		psw0						 @assign@ ( (((((((acc[7] ^ acc[6]) ^ acc[5]) ^ acc[4]) ^ acc[3]) ^ acc[2]) ^ acc[1]) ^ acc[0]) ),
-		ram_wdata					 @assign@ ( acc ),
-		ram_wr						 @assign@ ( ram_wr_i ),
-		dptr_inc					 @assign@ ( (concat(dph, dpl) + 1) ),
-		istart						 @assign@ ( ((last & ipending) & ~inst_skip) ),
-		rom_addr					 @assign@ ( npc ),
-		iram_wr						 @assign@ ( mem_wr ),
-		iram_addr					 @assign@ ( int_addra_r ),
-		iram_wdata					 @assign@ ( mem_din ),
-	]
+		wirings = [
+			res_bus.wireup(res_bus_slv),
+			status_d.assign(CY = cy_bits[0], AC = ac_bits[0], OV = ov_bits[0]),
+			status_wr.assign(CY = cy_bits[1], AC = ac_bits[1], OV = ov_bits[1]),
+		]
 
-	
-	 # instance 't51_alu'
-	alu = t51_alu(
-		TRISTATE = TRISTATE,
-
-		clk = clk,
-		last = last,
-		opcode = _SLV(inst),
-		acc = _SLV(acc),
-		b = _SLV(b),
-		ia = _SLV(op_a),
-		ib = _SLV(op_b),
-		bit_pattern = _SLV(bit_pattern),
-		cy_in = psw[6],
-		ac_in = psw[5],
-		acc_q = acc_q,
-		b_q = b_q,
-		idcpbl_q = res_bus_slv,
-		div_rdy = div_rdy,
-		cjne = cjne,
-		djnz = djnz,
-		cy_out = status_d[7-5],
-		ac_out = status_d[6-5],
-		ov_out = status_d[5-5],
-		cy_wr = status_wr[7-5],
-		ac_wr = status_wr[6-5],
-		ov_wr = status_wr[5-5]
-	)
-
-	wirings = [
-		res_bus.wireup(res_bus_slv)
-	]
-
-	return locals()
+		return locals()

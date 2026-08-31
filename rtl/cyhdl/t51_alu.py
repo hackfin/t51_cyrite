@@ -7,16 +7,20 @@ from cyrite.auxiliaries.xhdl import vhdlaux as vh
 import cyhdl_work as work
 
 # Imports for 't51_alu':
-from t51_pack import *
 
-from t51_md import t51_md
+from cyhdl_work.types import *
+from _t51_md import t51_md
+
+_SLV = lambda x : vh.Cast(vh._SLV, x)
+_INTBV = lambda x : vh.Cast(work._intbv, x)
 
 @block
 def addsub(a : Signal, b : Signal, sub : Signal, carry_in : Bool,
 	res : Signal.Output, carry : Bool.Output):
 
 	n = a.size()
-	b_i, fc, r = [ Signal(intbv()[n+1:]) for _ in range(3) ]
+	b_i, fc = [ Signal(intbv()[n+1:]) for _ in range(2) ]
+	r = Signal(intbv()[n+2:])
 
 	@always_comb
 	def worker0():
@@ -35,112 +39,116 @@ def addsub(a : Signal, b : Signal, sub : Signal, carry_in : Bool,
 		r.next = concat("0", a) + b_i + fc
 
 	logic = [
-		carry.wireup([-1])
-		res.wireup(r)
+		carry.wireup(r[-1]),
 	]
+	
+	# Cover case of signal length 1 (Bool)
+	if len(res) > 1:
+		logic += [ res.wireup(r[len(res):]) ]
+	else:
+		logic += [ res.wireup(r[0]) ]
 
 	return instances()
 
 @block
 def t51_alu(
-    # signals:
-    clk                         : Signal.Type(vh.std_logic),
-    last                        : Signal.Type(vh.std_logic),
-    opcode                      : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    acc                         : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    b                           : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    ia                          : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    ib                          : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    bit_pattern                 : Signal.Type(vh.std_logic_vector, 7+1 - 0),
-    cy_in                       : Signal.Type(vh.std_logic),
-    ac_in                       : Signal.Type(vh.std_logic),
-    acc_q                       : Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
-    b_q                         : Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
-    idcpbl_q                    : Signal.Type(vh.std_logic_vector, 7+1 - 0).Output,
-    div_rdy                     : Signal.Type(vh.std_logic).Output,
-    cjne                        : Signal.Type(vh.std_logic).Output,
-    djnz                        : Signal.Type(vh.std_logic).Output,
-    cy_out                      : Signal.Type(vh.std_logic).Output,
-    ac_out                      : Signal.Type(vh.std_logic).Output,
-    ov_out                      : Signal.Type(vh.std_logic).Output,
-    cy_wr                       : Signal.Type(vh.std_logic).Output,
-    ac_wr                       : Signal.Type(vh.std_logic).Output,
-    ov_wr                       : Signal.Type(vh.std_logic).Output,
-    
-    TRISTATE                    : int = 0): 
-    "rtl"
+	# signals:
+	clk							: Signal.Type(vh.std_logic),
+	last						: Signal.Type(vh.std_logic),
+	opcode						: Signal.Type(vh.std_logic_vector, 8),
+	acc							: Signal.Type(vh.std_logic_vector, 8),
+	b							: Signal.Type(vh.std_logic_vector, 8),
+	ia							: Signal.Type(vh.std_logic_vector, 8),
+	ib							: Signal.Type(vh.std_logic_vector, 8),
+	bit_pattern					: Signal.Type(vh.std_logic_vector, 8),
+	cy_in						: Signal.Type(vh.std_logic),
+	ac_in						: Signal.Type(vh.std_logic),
+	acc_q						: Signal.Type(vh.std_logic_vector, 8).Output,
+	b_q							: Signal.Type(vh.std_logic_vector, 8).Output,
+	idcpbl_q					: Signal.Type(vh.std_logic_vector, 8).Output,
+	div_rdy						: Signal.Type(vh.std_logic).Output,
+	cjne						: Signal.Type(vh.std_logic).Output,
+	djnz						: Signal.Type(vh.std_logic).Output,
+	cy_out						: Signal.Type(vh.std_logic).Output,
+	ac_out						: Signal.Type(vh.std_logic).Output,
+	ov_out						: Signal.Type(vh.std_logic).Output,
+	cy_wr						: Signal.Type(vh.std_logic).Output,
+	ac_wr						: Signal.Type(vh.std_logic).Output,
+	ov_wr						: Signal.Type(vh.std_logic).Output,
+	
+	TRISTATE					: int = 0): 
+	"rtl"
 
-    # Types
+	# Types
 
-    # Const
+	# Const
 
-    # Signals
+	# Signals
 
-    do_a_imm = Signal(bool())
-    do_a_carry = Signal(bool())
-    do_a_rr = Signal(bool())
-    do_a_inc = Signal(bool())
-    do_a_rrc = Signal(bool())
-    do_a_dec = Signal(bool())
-    do_a_rl = Signal(bool())
-    do_a_add = Signal(bool())
-    do_a_rlc = Signal(bool())
-    do_a_orl = Signal(bool())
-    do_a_anl = Signal(bool())
-    do_a_xrl = Signal(bool())
-    do_a_mov = Signal(bool())
-    do_a_div = Signal(bool())
-    do_a_subb = Signal(bool())
-    do_a_mul = Signal(bool())
-    do_a_cjne = Signal(bool())
-    do_a_swap = Signal(bool())
-    do_a_xch = Signal(bool())
-    do_a_da = Signal(bool())
-    do_a_xchd = Signal(bool())
-    do_a_clr = Signal(bool())
-    do_a_cpl = Signal(bool())
-    aop2 = Signal(vh.std_logic_vector()[7+1:0])
-    ada = Signal(vh.std_logic_vector()[8+1:0])
-    as_carry7 = Signal(bool())
-    as_ac = Signal(bool())
-    as_cy = Signal(bool())
-    as_q = Signal(vh.std_logic_vector()[7+1:0])
-    do_i_imm = Signal(bool())
-    do_i_inc = Signal(bool())
-    do_i_dec = Signal(bool())
-    do_i_orl = Signal(bool())
-    do_i_anl = Signal(bool())
-    do_i_xrl = Signal(bool())
-    do_i_mov = Signal(bool())
-    do_i_movd = Signal(bool())
-    do_i_cjne = Signal(bool())
-    iop = Signal(vh.std_logic_vector()[7+1:0])
-    ia_d = Signal(vh.std_logic_vector()[7+1:0])
-    cjne_cy_n = Signal(bool())
-    cjne_q = Signal(vh.std_logic_vector()[7+1:0])
-    cjne_q_zero = Signal(bool())
-    cjne_cy = Signal(bool())
-    mov_op = Signal(vh.std_logic_vector()[3+1:0])
-    mov_q = Signal(vh.std_logic_vector()[7+1:0])
-    do_b_inv = Signal(bool())
-    do_b_c_ba = Signal(bool())
-    do_b_c_dir = Signal(bool())
-    do_b_ba_dir = Signal(bool())
-    do_b_mov = Signal(bool())
-    do_b_jbc = Signal(bool())
-    do_b_op = Signal(vh.std_logic_vector()[1+1:0])
-    bit_op1 = Signal(vh.std_logic_vector()[7+1:0])
-    bit_op2 = Signal(vh.std_logic_vector()[7+1:0])
-    bit_isone = Signal(bool())
-    bit_result = Signal(vh.std_logic_vector()[7+1:0])
-    last_r = Signal(bool())
-    mul_q = Signal(vh.std_logic_vector()[15+1:0])
-    mul_ov = Signal(bool())
-    div_q = Signal(vh.std_logic_vector()[15+1:0])
-    div_ov = Signal(bool())
+	do_a_imm = Signal(bool())
+	do_a_carry = Signal(bool())
+	do_a_rr = Signal(bool())
+	do_a_inc = Signal(bool())
+	do_a_rrc = Signal(bool())
+	do_a_dec = Signal(bool())
+	do_a_rl = Signal(bool())
+	do_a_add = Signal(bool())
+	do_a_rlc = Signal(bool())
+	do_a_orl = Signal(bool())
+	do_a_anl = Signal(bool())
+	do_a_xrl = Signal(bool())
+	do_a_mov = Signal(bool())
+	do_a_div = Signal(bool())
+	do_a_subb = Signal(bool())
+	do_a_mul = Signal(bool())
+	do_a_cjne = Signal(bool())
+	do_a_swap = Signal(bool())
+	do_a_xch = Signal(bool())
+	do_a_da = Signal(bool())
+	do_a_xchd = Signal(bool())
+	do_a_clr = Signal(bool())
+	do_a_cpl = Signal(bool())
+	aop2 = Byte()
+	ada = Signal(vh.std_logic_vector()[8+1:0])
+	as_carry7 = Signal(bool())
+	as_ac = Signal(bool())
+	as_cy = Signal(bool())
+	as_q = Signal(vh.std_logic_vector()[7+1:0])
+	do_i_imm = Signal(bool())
+	do_i_inc = Signal(bool())
+	do_i_dec = Signal(bool())
+	do_i_orl = Signal(bool())
+	do_i_anl = Signal(bool())
+	do_i_xrl = Signal(bool())
+	do_i_mov = Signal(bool())
+	do_i_movd = Signal(bool())
+	do_i_cjne = Signal(bool())
+	iop = Byte()
+	ia_d = Signal(vh.std_logic_vector()[7+1:0])
+	cjne_cy_n = Signal(bool())
+	cjne_q = Signal(vh.std_logic_vector()[7+1:0])
+	cjne_cy = Signal(bool())
+	mov_op = Signal(vh.std_logic_vector()[3+1:0])
+	mov_q = Signal(vh.std_logic_vector()[7+1:0])
+	do_b_inv = Signal(bool())
+	do_b_c_ba = Signal(bool())
+	do_b_c_dir = Signal(bool())
+	do_b_ba_dir = Signal(bool())
+	do_b_mov = Signal(bool())
+	do_b_jbc = Signal(bool())
+	do_b_op = Signal(vh.std_logic_vector()[1+1:0])
+	bit_op1 = Signal(vh.std_logic_vector()[7+1:0])
+	bit_op2 = Signal(vh.std_logic_vector()[7+1:0])
+	bit_isone = Signal(bool())
+	bit_result = Signal(vh.std_logic_vector()[7+1:0])
+	last_r = Signal(bool())
+	mul_q = Word()
+	mul_ov = Signal(bool())
+	div_q = Word()
+	div_ov = Signal(bool())
 
-    @always(clk.posedge)
-    def worker():    
+	@always(clk.posedge)
+	def worker():	 
 		do_a_imm.next = False
 		do_a_carry.next = False
 		do_a_rr.next = False
@@ -167,56 +175,56 @@ def t51_alu(
 		do_a_imm.next = False
 		# This code might need some cleanups.
 		# Let the AI do it some time...
-		if opcode[3+1:0]  ==  0b0100:            
+		if opcode[3+1:0]  ==  0b0100:			 
 			do_a_imm.next = True
 
 
-		if opcode  ==  0b00000011:            
+		if opcode  ==  0b00000011:			  
 			do_a_rr.next = True
-		if opcode  ==  0b00000100:            
+		if opcode  ==  0b00000100:			  
 			do_a_inc.next = True
-		if opcode  ==  0b00010011:            
+		if opcode  ==  0b00010011:			  
 			do_a_rrc.next = True
-		if opcode  ==  0b00010100:            
+		if opcode  ==  0b00010100:			  
 			do_a_dec.next = True
-		if opcode  ==  0b00100011:            
+		if opcode  ==  0b00100011:			  
 			do_a_rl.next = True
-		if (((opcode == 0b00100100) | (opcode == 0b00100101)) | (opcode[7+1:1] == 0b0010011))  |  (opcode[7+1:3] == 0b00101):            
+		if (((opcode == 0b00100100) | (opcode == 0b00100101)) | (opcode[7+1:1] == 0b0010011))  |  (opcode[7+1:3] == 0b00101):			 
 			do_a_add.next = True
-		if opcode  ==  0b00110011:            
+		if opcode  ==  0b00110011:			  
 			do_a_rlc.next = True
-		if (((opcode == 0b00110100) | (opcode == 0b00110101)) | (opcode[7+1:1] == 0b0011011))  |  (opcode[7+1:3] == 0b00111):            
+		if (((opcode == 0b00110100) | (opcode == 0b00110101)) | (opcode[7+1:1] == 0b0011011))  |  (opcode[7+1:3] == 0b00111):			 
 			do_a_add.next = True
 			do_a_carry.next = True
-		if (((opcode == 0b01000100) | (opcode == 0b01000101)) | (opcode[7+1:1] == 0b0100011))  |  (opcode[7+1:3] == 0b01001):            
+		if (((opcode == 0b01000100) | (opcode == 0b01000101)) | (opcode[7+1:1] == 0b0100011))  |  (opcode[7+1:3] == 0b01001):			 
 			do_a_orl.next = True
-		if (((opcode == 0b01010100) | (opcode == 0b01010101)) | (opcode[7+1:1] == 0b0101011))  |  (opcode[7+1:3] == 0b01011):            
+		if (((opcode == 0b01010100) | (opcode == 0b01010101)) | (opcode[7+1:1] == 0b0101011))  |  (opcode[7+1:3] == 0b01011):			 
 			do_a_anl.next = True
-		if (((opcode == 0b01100100) | (opcode == 0b01100101)) | (opcode[7+1:1] == 0b0110011))  |  (opcode[7+1:3] == 0b01101):            
+		if (((opcode == 0b01100100) | (opcode == 0b01100101)) | (opcode[7+1:1] == 0b0110011))  |  (opcode[7+1:3] == 0b01101):			 
 			do_a_xrl.next = True
-		if (((opcode == 0b01110100) | (opcode == 0b11100101)) | (opcode[7+1:1] == 0b1110011))  |  (opcode[7+1:3] == 0b11101):            
+		if (((opcode == 0b01110100) | (opcode == 0b11100101)) | (opcode[7+1:1] == 0b1110011))  |  (opcode[7+1:3] == 0b11101):			 
 			do_a_mov.next = True
-		if opcode  ==  0b10000100:            
+		if opcode  ==  0b10000100:			  
 			do_a_div.next = True
-		if (((opcode == 0b10010100) | (opcode == 0b10010101)) | (opcode[7+1:1] == 0b1001011))  |  (opcode[7+1:3] == 0b10011):            
+		if (((opcode == 0b10010100) | (opcode == 0b10010101)) | (opcode[7+1:1] == 0b1001011))  |  (opcode[7+1:3] == 0b10011):			 
 			do_a_subb.next = True
 			do_a_carry.next = True
-		if opcode  ==  0b10100100:            
+		if opcode  ==  0b10100100:			  
 			do_a_mul.next = True
-		if opcode[7+1:1]  ==  0b1011010:            
+		if opcode[7+1:1]  ==  0b1011010:			
 			do_a_subb.next = True
 			do_a_cjne.next = True
-		if opcode  ==  0b11000100:            
+		if opcode  ==  0b11000100:			  
 			do_a_swap.next = True
-		if ((opcode == 0b11000101) | (opcode[7+1:1] == 0b1100011))  |  (opcode[7+1:3] == 0b11001):            
+		if ((opcode == 0b11000101) | (opcode[7+1:1] == 0b1100011))	|  (opcode[7+1:3] == 0b11001):			  
 			do_a_xch.next = True
-		if opcode  ==  0b11010100:            
+		if opcode  ==  0b11010100:			  
 			do_a_da.next = True
-		if opcode[7+1:1]  ==  0b1101011:            
+		if opcode[7+1:1]  ==  0b1101011:			
 			do_a_xchd.next = True
-		if opcode  ==  0b11100100:            
+		if opcode  ==  0b11100100:			  
 			do_a_clr.next = True
-		if opcode  ==  0b11110100:            
+		if opcode  ==  0b11110100:			  
 			do_a_cpl.next = True
 		do_i_imm.next = False
 		do_i_inc.next = False
@@ -229,23 +237,23 @@ def t51_alu(
 		do_i_cjne.next = False
 		ia_d.next = ia
 		mov_op.next = opcode[7+1:4]
-		if opcode[3+1:0]  ==  0b0011:            
+		if opcode[3+1:0]  ==  0b0011:			 
 			do_i_imm.next = True
-		if ((opcode == 0b00000101) | (opcode[7+1:1] == 0b0000011))  |  (opcode[7+1:3] == 0b00001):            
+		if ((opcode == 0b00000101) | (opcode[7+1:1] == 0b0000011))	|  (opcode[7+1:3] == 0b00001):			  
 			do_i_inc.next = True
-		if ((((opcode == 0b00010101) | (opcode[7+1:1] == 0b0001011)) | (opcode[7+1:3] == 0b00011)) | (opcode[7+1:3] == 0b11011))  |  (opcode == 0b11010101):            
+		if ((((opcode == 0b00010101) | (opcode[7+1:1] == 0b0001011)) | (opcode[7+1:3] == 0b00011)) | (opcode[7+1:3] == 0b11011))  |  (opcode == 0b11010101):			
 			do_i_dec.next = True
-		if opcode[7+1:1]  ==  0b0100001:            
+		if opcode[7+1:1]  ==  0b0100001:			
 			do_i_orl.next = True
-		if opcode[7+1:1]  ==  0b0101001:            
+		if opcode[7+1:1]  ==  0b0101001:			
 			do_i_anl.next = True
-		if opcode[7+1:1]  ==  0b0110001:            
+		if opcode[7+1:1]  ==  0b0110001:			
 			do_i_xrl.next = True
-		if (((((((((((((opcode == 0b01110101) | (opcode[7+1:1] == 0b0111011)) | (opcode[7+1:3] == 0b01111)) | (opcode[7+1:1] == 0b1000011)) | (opcode[7+1:3] == 0b10001)) | (opcode == 0b10010000)) | (opcode[7+1:1] == 0b1010011)) | (opcode[7+1:3] == 0b10101)) | (opcode == 0b11110000)) | (opcode[7+1:1] == 0b1111001)) | (opcode == 0b11110101)) | (opcode[7+1:1] == 0b1111011)) | (opcode[7+1:3] == 0b11111))  |  ((opcode[7+1:5] == 0b110) & (opcode[3+1:0] == 0b0000)):            
+		if (((((((((((((opcode == 0b01110101) | (opcode[7+1:1] == 0b0111011)) | (opcode[7+1:3] == 0b01111)) | (opcode[7+1:1] == 0b1000011)) | (opcode[7+1:3] == 0b10001)) | (opcode == 0b10010000)) | (opcode[7+1:1] == 0b1010011)) | (opcode[7+1:3] == 0b10101)) | (opcode == 0b11110000)) | (opcode[7+1:1] == 0b1111001)) | (opcode == 0b11110101)) | (opcode[7+1:1] == 0b1111011)) | (opcode[7+1:3] == 0b11111))  |	((opcode[7+1:5] == 0b110) & (opcode[3+1:0] == 0b0000)):			   
 			do_i_mov.next = True
-		if opcode  ==  0b10000101:            
+		if opcode  ==  0b10000101:			  
 			do_i_movd.next = True
-		if (opcode[7+1:1] == 0b1011011)  |  (opcode[7+1:3] == 0b10111):            
+		if (opcode[7+1:1] == 0b1011011)  |	(opcode[7+1:3] == 0b10111):			   
 			do_i_cjne.next = True
 		do_b_inv.next = False
 		do_b_c_ba.next = False
@@ -254,34 +262,65 @@ def t51_alu(
 		do_b_mov.next = False
 		do_b_jbc.next = False
 		do_b_op.next = opcode[5+1:4]
-		if opcode[1+1:0]  ==  0b00:            
+		if opcode[1+1:0]  ==  0b00:			   
 			do_b_inv.next = True
-		if ((((opcode == 0b01110010) | (opcode == 0b10000010)) | (opcode == 0b10100000)) | (opcode == 0b10100010))  |  (opcode == 0b10110000):            
+		if ((((opcode == 0b01110010) | (opcode == 0b10000010)) | (opcode == 0b10100000)) | (opcode == 0b10100010))	|  (opcode == 0b10110000):			  
 			do_b_c_ba.next = True
-		if ((opcode == 0b10110011) | (opcode == 0b11000011))  |  (opcode == 0b11010011):            
+		if ((opcode == 0b10110011) | (opcode == 0b11000011))  |  (opcode == 0b11010011):			
 			do_b_c_dir.next = True
-		if ((opcode == 0b10110010) | (opcode == 0b11000010))  |  (opcode == 0b11010010):            
+		if ((opcode == 0b10110010) | (opcode == 0b11000010))  |  (opcode == 0b11010010):			
 			do_b_ba_dir.next = True
-		if opcode  ==  0b10010010:            
+		if opcode  ==  0b10010010:			  
 			do_b_mov.next = True
-		if opcode  ==  0b00010000:            
+		if opcode  ==  0b00010000:			  
 			do_b_jbc.next = True
 		last_r.next = last
 
 	# TODO: AddSub translation
 	#
 
-	inst_asub_0 = addsub(acc[4:], aop2[4:], do_a_subb, \
-		do_a_subb ^ (do_a_carry & cy_in), as_q[4:], as_ac)
+	a = Bool()
+	as_7 = Bool()
+	as_74 = Signal(intbv()[3:])
+	as_40 = Signal(intbv()[4:])
 
-	inst_asub_1 = addsub(acc[7:4], aop2[7:4], do_a_subb, \
-		as_ac, as_q[7:4], as_carry7)
 
-	inst_asub_2 = addsub(acc[7], aop2[7], do_a_subb, \
-		as_carry7, as_q[7], as_cy)
+	a_logic = [
+		a.wireup(do_a_subb ^ (do_a_carry & cy_in)),
+		as_q.set(concat(as_7, as_74, as_40))
+	]
 
-	inst_asub_3 = addsub(ia, ib, True, \
-		True, cjne_q, cjne_cy_n)
+	u_ia = Byte()
+	u_acc = Byte()
+	acc_r = Byte()
+
+	id_r = Byte()
+
+	acc_conversion = [
+		u_acc.wireup(_INTBV(acc)),
+		u_ia.wireup(_INTBV(ia)),
+		acc_q.wireup(acc_r),
+		idcpbl_q.wireup(id_r),
+	]
+
+	# acc = u_acc # Refer to u_acc below
+
+
+	inst_asub_0 = addsub(u_acc, _INTBV(aop2[4:]), do_a_subb, \
+		a,
+		as_40, as_ac)
+
+	inst_asub_1 = addsub(u_acc[7:4], _INTBV(aop2[7:4]), do_a_subb, \
+		as_ac,
+		as_74, as_carry7)
+
+	inst_asub_2 = addsub(u_acc[7], aop2[7], do_a_subb, \
+		as_carry7,
+		as_7, as_cy)
+
+	inst_asub_3 = addsub(u_ia, _INTBV(ib), True, \
+		True,
+		cjne_q, cjne_cy_n)
 
 
 	do_addsub = Bool()
@@ -290,290 +329,300 @@ def t51_alu(
 		do_addsub.set(do_a_add | do_a_subb)
 	]
 
-	if TRISTATE:
-		assert False
-	else:
-		@always_comb
-		def logic_acc():
-			if do_a_clr:
-				acc_q.next = concat(acc[0] acc[8:1])
-			elif do_a_rr:
-				acc_q.next = concat(cy_in, acc[8:1])
-			elif do_a_rl:
-				acc_q.next = concat(acc[7:0], acc[7])
-			elif do_a_rlc:
-				acc_q.next = concat(acc[7:0], cy_in)
-			elif do_a_inc:
-				acc_q.next = acc + 1
-			elif do_a_dec:
-				acc_q.next = acc - 1
-			elif do_a_cpl:
-				acc_q.next = ~ack
-			elif do_a_orl:
-				acc_q.next = acc | aop2
-			elif do_a_anl:
-				acc_q.next = acc & aop2
-			elif do_a_xrl:
-				acc_q.next = acc ^ aop2
-			elif do_a_swap:
-				acc_q.next = concat(acc[4:0], acc[8:4])
-			elif do_a_xch:
-				acc_q.next = ia
-			elif do_a_xchd:
-				acc_q.next = concat(acc[8:4], ia[4:0])
-			elif do_a_mov:
-				acc_q.next = aop2
-			elif do_a_da:
-				acc_q.next = ada[8:]
-			elif do_addsub:
-				acc_q.next = as_q
-			elif do_a_mul:
-				acc_q.next = mul_q
-			elif do_a_div:
-				acc_q.next = div_q
+	@always_comb
+	def logic_acc():
+		if do_a_clr:
+			acc_r.next = concat(u_acc[0], u_acc[8:1])
+		elif do_a_rr:
+			acc_r.next = concat(cy_in, u_acc[8:1])
+		elif do_a_rl:
+			acc_r.next = concat(u_acc[7:0], u_acc[7])
+		elif do_a_rlc:
+			acc_r.next = concat(u_acc[7:0], cy_in)
+		elif do_a_inc:
+			acc_r.next = u_acc + 1
+		elif do_a_dec:
+			acc_r.next = u_acc - 1
+		elif do_a_cpl:
+			acc_r.next = ~u_acc
+		elif do_a_orl:
+			acc_r.next = u_acc | aop2
+		elif do_a_anl:
+			acc_r.next = u_acc & aop2
+		elif do_a_xrl:
+			acc_r.next = u_acc ^ aop2
+		elif do_a_swap:
+			acc_r.next = concat(u_acc[4:0], u_acc[8:4])
+		elif do_a_xch:
+			acc_r.next = u_ia
+		elif do_a_xchd:
+			acc_r.next = concat(u_acc[8:4], u_ia[4:0])
+		elif do_a_mov:
+			acc_r.next = aop2
+		elif do_a_da:
+			acc_r.next = _INTBV(ada[8:])
+		elif do_addsub:
+			acc_r.next = as_q
+		elif do_a_mul:
+			acc_r.next = mul_q[8:]
+		elif do_a_div:
+			acc_r.next = div_q[8:]
+		else:
+			acc_r.next = work.DONTCARE
+
+
+	@always_comb
+	def logic_cy():
+		if do_a_cjne:
+			cy_out.next = cjne_cy
+		elif do_a_da:
+			cy_out.next = ada[8]
+		elif do_a_rrc:
+			cy_out.next = u_acc[0]
+		elif do_a_rlc:
+			cy_out.next = u_acc[7]
+		elif do_addsub:
+			cy_out.next = as_cy ^ do_a_subb
+		elif do_b_c_dir:
+			if do_b_op == 0b11:
+				cy_out.next = ~cy_in
+			elif do_b_op == 0b00:
+				cy_out.next = False
+			elif do_b_op == 0b01:
+				cy_out.next = True
 			else:
-				acc.q.next = work.DONTCARE
+				cy_out.next = False
+
+		elif do_b_c_ba:
+			if do_b_op == 0b11 and do_b_inv == False:
+				cy_out.next = cy_in | bit_isone
+			elif do_b_op == 0b00 and do_b_inv == False:
+				cy_out.next = cy_in & bit_isone
+			elif do_b_op == 0b10:
+				if do_b_inv == True:
+					cy_out.next = cy_in | bit_isone
+				else:
+					cy_out.next = bit_isone
+			elif do_b_op == 0b11:
+				if do_b_inv:
+					cy_out.next = cy_in & bit_isone
+				else: # UNDEFINED
+					cy_out.next = work.DONTCARE
 
 
-		@always_comb
-		def logic_cy():
-			if do_cjne:
-				cy_out.next = cjne_cy
-			elif do_a_da:
-				cy_out.next = ada[8]
-			elif do_a_rrc:
-				cy_out.next = acc[0]
-			elif do_a_rlc:
-				cy_out.next = acc[7]
-			elif do_addsub:
-				cy_out.next = as_cy[7] ^ do_a_subb
-			elif do_b_c_dir:
-				if do_b_op == 0b11:
-					cy_out.next = ~cy_in
-				elif do_b_op == 0b00:
-					cy_out.next = False
-				elif do_b_op == 0b01:
-					cy_out.next = True
-				#else missing
-			elif do_b_c_ba:
-				if do_b_op == 0b11 and do_b_inv == False:
-					cy_out.next = cy_in | bit_is_one
-				elif do_b_op == 0b00 and do_b_inv == False
-					cy_out.next = cy_in & bit_is_one
-				elif do_b_op == 0b10:
-					if do_b_inv == True:
-						cy_out.next = cy_in | bit_is_one
-					else:
-						cy_out.next = bit_is_one
-				elif do_b_op == 0b11:
-					if do_b_inv:
-						cy_out.next = cy_in & bit_is_one
-					else: # UNDEFINED
-						cy_out.next = work.DONTCARE
+	@always_comb
+	def logic_ac():
+		if do_addsub:
+			ac_out.next = as_ac
+		else:
+			ac_out.next = work.DONTCARE
 
 
-		@always_comb
-		def logic_ac():
-			if do_addsub:
-				ac_out.next = as_ac
-			else:
-				ac_out.next = work.DONTCARE
+	@always_comb
+	def logic_b():
+		if do_a_mul:
+			b_q.next = mul_q[16:8]
+		elif do_a_div:
+			b_q.next = div_q[16:8]
+		else:
+			b_q.next = work.DONTCARE
 
+	@always_comb
+	def logic_ov():
+		if do_addsub:
+			ov_out.next = as_cy
+		elif do_a_div:
+			ov_out.next = div_ov
+		elif do_a_mul:
+			ov_out.next = mul_ov
+		else:
+			b_q.next = work.DONTCARE
 
-		@always_comb
-		def logic_b():
-			if do_a_mul:
-				b_q.next = mul_q[16:8]
-			elif do_a_div:
-				b_q.next = div_q[16:8]
-			else:
-				b_q.next = work.DONTCARE
-	
-		@always_comb
-		def logic_ov():
-			if do_addsub:
-				ov_out.next = as_cy
-			elif do_a_div:
-				ov_out.next = div_ov
-			elif do_a_mul:
-				ov_out.next = mul_ov
-			else:
-				b_q.next = work.DONTCARE
-
-		@always_comb
-		def logic_idcpbl():
-			if do_i_inc:
-				idcpbl_q.next = ia + 1
-			elif do_i_dec:
-				idcpbl_q.next = ia - 1
-			elif do_i_orl:
-				idcpbl_q.next = iop | ia
-			elif do_i_anl:
-				idcpbl_q.next = iop & ia
-			elif do_i_xrl:
-				idcpbl_q.next = iop ^ ia
-			elif do_i_xchd:
-				idcpbl_q.next = concat(ia[8:4], acc[4:0])
-			elif do_b_ba_dir | do_b_mov:
-				idcpbl_q.next = bit_result
-			elif do_i_mov:
-				idcpbl_q.next = mov_q
-			elif do_i_movd:
-				idcpbl_q.next = ia_d
-			else:
-				idcpbl_q.next = work.DONTCARE
+	@always_comb
+	def logic_idcpbl():
+		if do_i_inc:
+			id_r.next = u_ia + 1
+		elif do_i_dec:
+			id_r.next = u_ia - 1
+		elif do_i_orl:
+			id_r.next = iop | u_ia
+		elif do_i_anl:
+			id_r.next = iop & u_ia
+		elif do_i_xrl:
+			id_r.next = iop ^ u_ia
+		elif do_a_xch:
+			id_r.next = concat(u_ia[8:4], u_acc[4:0])
+		elif do_b_ba_dir | do_b_mov:
+			id_r.next = bit_result
+		elif do_i_mov:
+			id_r.next = mov_q
+		elif do_i_movd:
+			id_r.next = ia_d
+		else:
+			id_r.next = work.DONTCARE
 
 		
 
-    @always(ib, do_a_imm, ia)
-    def select_aop2():    
-        # ternary:        
-        if do_a_imm  ==  True:        
-            aop2.next = ib
-        else:
-            aop2.next = ia
+	@always(ib, do_a_imm, ia)
+	def select_aop2():	  
+		# ternary:		  
+		if do_a_imm  ==  True:		  
+			aop2.next = _INTBV(ib)
+		else:
+			aop2.next = _INTBV(ia)
 
-    @always(ia)
-    def select_djnz():    
-        # ternary:        
-        if (ia - 1)  !=  0b00000000:        
-            djnz.next = True
-        else:
-            djnz.next = False
-
-    @always(acc, cy_in, ac_in)
-    def daa():    
-        # async mux statements:        
-        add = intbv()[8:]
-        accu = intbv()[9:]
-
-        accu = concat(False, acc)
-        if (ac_in == True)  |  (accu[3+1:0] > 9):        
-            add[3+1:0] = 0b0110
-        if ((cy_in == True) | (accu[7+1:4] > 9))  |  ((accu[7+1:4] == 9) & (accu[3+1:0] > 9)):        
-            add[7+1:4] = 0b0110
-        accu = (accu + add)
-        ada.next = concat((accu[8] | cy_in), accu)
-
-    @always(ib, do_i_imm, acc)
-    def select_iop():    
-        # ternary:        
-        if do_i_imm  ==  True:        
-            iop.next = ib
-        else:
-            iop.next = acc
-
-    @always(mov_op, ib, acc, ia_d)
-    def mov():    
-        # case sequence
-        if mov_op == 0b0111: # case begin        
-            mov_q.next = ib
-        elif mov_op == 0b1000: # case        
-            mov_q.next = ia_d
-        elif mov_op == 0b1010: # case        
-            mov_q.next = ia_d
-        elif mov_op == 0b1111: # case        
-            mov_q.next = acc
-        elif mov_op == 0b1100: # case        
-            mov_q.next = ia_d
-        elif mov_op == 0b1101: # case        
-            # Duplicate            
-            mov_q.next = ia_d
-        else:
-            mov_q.next = work.DONTCARE
-        
-    @always(cjne_q)
-    def proc_7580():    
-        # ternary:        
-        if cjne_q  ==  0b00000000:        
-            cjne_q_zero.next = True
-        else:
-            cjne_q_zero.next = False
-
-    @always(do_i_cjne, cjne_q_zero, as_q)
-    def proc_7586():    
-        # ternary:        
-        if (do_i_cjne == True)  &  (cjne_q_zero == False):        
-            cjne.next = True
-        elif do_i_cjne  ==  True:        
-            cjne.next = False
-        elif as_q  !=  0b00000000:        
-            cjne.next = True
-        else:
-            cjne.next = False
-
-    @always(bit_pattern, ia, do_b_inv)
-    def proc_7600():    
-        # ternary:        
-        if do_b_inv  ==  True:        
-            bit_op2.next = (bit_pattern & ~ia)
-        else:
-            bit_op2.next = (bit_pattern & ia)
-
-    @always(bit_op2)
-    def proc_7606():    
-        # ternary:        
-        if bit_op2  ==  0b00000000:        
-            bit_isone.next = False
-        else:
-            bit_isone.next = True
-
-    @always(ia, bit_pattern, do_b_ba_dir, do_b_op, bit_op1, do_b_jbc, cy_in, do_b_mov)
-    def proc_7612():    
-        # ternary:        
-        if (do_b_ba_dir == True)  &  (do_b_op == 0b11):        
-            bit_result.next = (ia ^ bit_pattern)
-        elif ((do_b_ba_dir == True) & (do_b_op == 0b00))  |  (do_b_jbc == True):        
-            bit_result.next = bit_op1
-        elif (do_b_ba_dir == True)  &  (do_b_op == 0b01):        
-            bit_result.next = (ia | bit_pattern)
-        elif do_b_mov  ==  True:        
-            bit_result.next = (bit_op1 | (bit_pattern & concat(cy_in, cy_in, cy_in, cy_in, cy_in, cy_in, cy_in, cy_in)))
-        else:
-            bit_result.next = UNDEFINED8
-
-    @always(last_r, do_a_add, do_a_subb, do_a_cjne)
-    def proc_7624():    
-        # ternary:        
-        if ((do_a_add == True) | (do_a_subb == True))  &  (do_a_cjne == False):        
-            ac_wr.next = last_r
-        else:
-            ac_wr.next = False
-
-    @always(last_r, do_a_add, do_a_subb, do_a_cjne, do_a_div, do_a_mul)
-    def proc_7630():    
-        # ternary:        
-        if ((((do_a_add == True) | (do_a_subb == True)) & (do_a_cjne == False)) | (do_a_div == True))  |  (do_a_mul == True):        
-            ov_wr.next = last_r
-        else:
-            ov_wr.next = False
-
-    @always(last_r, do_a_add, do_a_subb, do_a_rrc, do_a_rlc, do_i_cjne, do_a_da, do_b_c_ba, do_b_c_dir, do_a_div, do_a_mul)
-    def proc_7636():    
-        # ternary:        
-        if (((((((((do_a_add == True) | (do_a_subb == True)) | (do_a_rrc == True)) | (do_a_rlc == True)) | (do_i_cjne == True)) | (do_a_da == True)) | (do_b_c_ba == True)) | (do_b_c_dir == True)) | (do_a_div == True))  |  (do_a_mul == True):        
-            cy_wr.next = last_r
-        else:
-            cy_wr.next = False
+	@always(ia)
+	def select_djnz():	  
+		# ternary:		  
+		if u_ia  !=  0b00000001:		
+			djnz.next = True
+		else:
+			djnz.next = False
 
 
-    ###### Wirings: ######
-    _wires_ = [
-        cjne_cy                      @assign@ ( ~cjne_cy_n ),
-        bit_op1                      @assign@ ( (ia & ~bit_pattern) ),
-    ]
+	accu = Signal(intbv()[9:])
+	add = [ Signal(intbv()[4:]) for _ in range(2) ]
 
-    
-     # instance 't51_md'
-    md = t51_md(
-         clk = clk,
-         acc = acc,
-         b = b,
-         mul_q = mul_q,
-         mul_ov = mul_ov,
-         div_q = div_q,
-         div_ov = div_ov,
-         div_rdy = div_rdy
-    )
+	accu_logic = [
+		accu.set(u_acc + concat(add[1], add[0])),
+		ada.set(concat((accu[8] | cy_in), accu[8:]))
+	]
 
-    return locals()
+	@always(u_acc, cy_in, ac_in)
+	def daa():	  
+		# async mux statements:		   
+
+		add[0].next = 0 # default
+		add[1].next = 0 # default
+
+		if (ac_in == True)	or  (u_acc[4:0] > 9):		 
+			add[0].next = 0b0110
+
+		if ((cy_in == True) or (accu[8:4] > 9)) \
+			or  ((accu[8:4] == 9) and (accu[4:0] > 9)):		  
+
+			add[1].next = 0b0110
+
+
+	@always(ib, do_i_imm, u_acc)
+	def select_iop():	 
+		# ternary:		  
+		if do_i_imm  ==  True:		  
+			iop.next = _INTBV(ib)
+		else:
+			iop.next = u_acc
+
+	@always(mov_op, ib, acc, ia_d)
+	def mov():	  
+		# case sequence
+		if mov_op == 0b0111: # case begin		 
+			mov_q.next = ib
+		elif mov_op == 0b1000: # case		 
+			mov_q.next = ia_d
+		elif mov_op == 0b1010: # case		 
+			mov_q.next = ia_d
+		elif mov_op == 0b1111: # case		 
+			mov_q.next = acc
+		elif mov_op == 0b1100: # case		 
+			mov_q.next = ia_d
+		elif mov_op == 0b1101: # case		 
+			# Duplicate			   
+			mov_q.next = ia_d
+		else:
+			mov_q.next = work.DONTCARE
+		
+#	@always(cjne_q)
+#	def select_cjne_q():	
+#		# ternary:		  
+#		if cjne_q  ==  0b00000000:		  
+#			cjne_q_zero.next = True
+#		else:
+#			cjne_q_zero.next = False
+
+	@always(do_i_cjne, cjne_q, as_q)
+	def select_cjne():	
+		# ternary:		  
+		if (do_i_cjne == True)	&  (cjne_q != 0b00000000):		  
+			cjne.next = True
+		elif do_i_cjne	==	True:		 
+			cjne.next = False
+		elif as_q  !=  0b00000000:		  
+			cjne.next = True
+		else:
+			cjne.next = False
+
+	@always(bit_pattern, ia, do_b_inv)
+	def select_bit_op2():	
+		# ternary:		  
+		if do_b_inv  ==  True:		  
+			bit_op2.next = (bit_pattern & ~ia)
+		else:
+			bit_op2.next = (bit_pattern & ia)
+
+	@always(bit_op2)
+	def select_bit_isone():	
+		# ternary:		  
+		if bit_op2	==	0b00000000:		   
+			bit_isone.next = False
+		else:
+			bit_isone.next = True
+
+	@always(ia, bit_pattern, do_b_ba_dir, do_b_op, bit_op1, do_b_jbc, cy_in, do_b_mov)
+	def select_bit_result():	
+		# ternary:		  
+		if (do_b_ba_dir == True)  &  (do_b_op == 0b11):		   
+			bit_result.next = (ia ^ bit_pattern)
+		elif ((do_b_ba_dir == True) & (do_b_op == 0b00))  |  (do_b_jbc == True):		
+			bit_result.next = bit_op1
+		elif (do_b_ba_dir == True)	&  (do_b_op == 0b01):		 
+			bit_result.next = (ia | bit_pattern)
+		elif do_b_mov  ==  True:		
+			bit_result.next = (bit_op1 | (bit_pattern & concat(cy_in, cy_in, cy_in, cy_in, cy_in, cy_in, cy_in, cy_in)))
+		else:
+			bit_result.next = work.UNDEFINED8
+
+	@always(last_r, do_a_add, do_a_subb, do_a_cjne)
+	def select_ac():	
+		# ternary:		  
+		if ((do_a_add == True) | (do_a_subb == True))  &  (do_a_cjne == False):		   
+			ac_wr.next = last_r
+		else:
+			ac_wr.next = False
+
+	@always(last_r, do_a_add, do_a_subb, do_a_cjne, do_a_div, do_a_mul)
+	def select_ov():	
+		# ternary:		  
+		if ((((do_a_add == True) | (do_a_subb == True)) & (do_a_cjne == False)) | (do_a_div == True))  |  (do_a_mul == True):		 
+			ov_wr.next = last_r
+		else:
+			ov_wr.next = False
+
+	@always(last_r, do_a_add, do_a_subb, do_a_rrc, do_a_rlc, do_i_cjne, do_a_da, do_b_c_ba, do_b_c_dir, do_a_div, do_a_mul)
+	def select_cy():	
+		# ternary:		  
+		if (((((((((do_a_add == True) | (do_a_subb == True)) | (do_a_rrc == True)) | (do_a_rlc == True)) | (do_i_cjne == True)) | (do_a_da == True)) | (do_b_c_ba == True)) | (do_b_c_dir == True)) | (do_a_div == True))  |  (do_a_mul == True):		 
+			cy_wr.next = last_r
+		else:
+			cy_wr.next = False
+
+
+	###### Wirings: ######
+	_wires_ = [
+		cjne_cy						 @assign@ ( ~cjne_cy_n ),
+		bit_op1						 @assign@ ( (ia & ~bit_pattern) ),
+	]
+
+	
+	 # instance 't51_md'
+	md = t51_md(
+		 clk = clk,
+		 acc = u_acc,
+		 b = _INTBV(b),
+		 mul_q = mul_q,
+		 mul_ov = mul_ov,
+		 div_q = div_q,
+		 div_ov = div_ov,
+		 div_rdy = div_rdy
+	)
+
+	return locals()
