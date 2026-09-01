@@ -15,40 +15,45 @@ _SLV = lambda x : vh.Cast(vh._SLV, x)
 _INTBV = lambda x : vh.Cast(work._intbv, x)
 
 @block
-def addsub(a : Signal, b : Signal, sub : Signal, carry_in : Bool,
-	res : Signal.Output, carry : Bool.Output):
+def addsub(
+	# signals:
+	a							: Signal,
+	b							: Signal,
+	sub							: Signal.Type(bool),
+	carry_in					: Signal.Type(bool),
+	res							: Signal.Output,
+	carry						: Signal.Type(bool).Output,
+   ): 
+	"rtl"
 
-	n = a.size()
-	b_i, fc = [ Signal(intbv()[n+1:]) for _ in range(2) ]
-	r = Signal(intbv()[n+2:])
+	WIDTH = res.size()
 
-	@always_comb
-	def worker0():
-		if carry_in:
-			fc.next = 1
-		else:
-			fc.next = 0
+	res_i = Signal(vh.unsigned()[WIDTH+3:0])
+	wire = bool() if WIDTH == 1 else intbv()[WIDTH:]
+	bx = Signal(wire)
 
-		if sub:
-			b_i.next = concat("0", ~b)
-		else:
-			b_i.next = concat("0", b)
+	dup = [ sub for _ in range(WIDTH) ]
 
-	@always_comb
-	def worker1():
-		r.next = concat("0", a) + b_i + fc
+	sl = 0 if WIDTH == 1 else slice(WIDTH, 0)
+
+	ci = Signal(intbv()[2:])
+	ai, bi = [ Signal(intbv()[WIDTH+1:]) for _ in range(2) ]
+
+	print("DEBUG SIGNAL A", type(a), a.size())
+
+	_sub = sub if WIDTH == 1 else concat(*[ sub for _ in range(WIDTH) ])
 
 	logic = [
-		carry.wireup(r[-1]),
+		res_i.set ( a + (b ^ _sub) + carry_in)
 	]
-	
-	# Cover case of signal length 1 (Bool)
-	if len(res) > 1:
-		logic += [ res.wireup(r[len(res):]) ]
-	else:
-		logic += [ res.wireup(r[0]) ]
 
+	assignments = [
+			carry						 @assign@ ( res_i[WIDTH] ),
+			res							 @assign@ ( res_i[sl] ),
+	]
 	return instances()
+
+
 
 @block
 def t51_alu(
@@ -306,7 +311,7 @@ def t51_alu(
 	# acc = u_acc # Refer to u_acc below
 
 
-	inst_asub_0 = addsub(u_acc, _INTBV(aop2[4:]), do_a_subb, \
+	inst_asub_0 = addsub(u_acc[4:], _INTBV(aop2[4:]), do_a_subb, \
 		a,
 		as_40, as_ac)
 
@@ -332,8 +337,10 @@ def t51_alu(
 	@always_comb
 	def logic_acc():
 		if do_a_clr:
-			acc_r.next = concat(u_acc[0], u_acc[8:1])
+			acc_r.next = 0
 		elif do_a_rr:
+			acc_r.next = concat(u_acc[0], u_acc[8:1])
+		elif do_a_rrc:
 			acc_r.next = concat(cy_in, u_acc[8:1])
 		elif do_a_rl:
 			acc_r.next = concat(u_acc[7:0], u_acc[7])
@@ -368,32 +375,12 @@ def t51_alu(
 		elif do_a_div:
 			acc_r.next = div_q[8:]
 		else:
-			acc_r.next = work.DONTCARE
+			acc_r.next = work.DontCare(8, '-')
 
 
 	@always_comb
 	def logic_cy():
-		if do_a_cjne:
-			cy_out.next = cjne_cy
-		elif do_a_da:
-			cy_out.next = ada[8]
-		elif do_a_rrc:
-			cy_out.next = u_acc[0]
-		elif do_a_rlc:
-			cy_out.next = u_acc[7]
-		elif do_addsub:
-			cy_out.next = as_cy ^ do_a_subb
-		elif do_b_c_dir:
-			if do_b_op == 0b11:
-				cy_out.next = ~cy_in
-			elif do_b_op == 0b00:
-				cy_out.next = False
-			elif do_b_op == 0b01:
-				cy_out.next = True
-			else:
-				cy_out.next = False
-
-		elif do_b_c_ba:
+		if do_b_c_ba:
 			if do_b_op == 0b11 and do_b_inv == False:
 				cy_out.next = cy_in | bit_isone
 			elif do_b_op == 0b00 and do_b_inv == False:
@@ -407,7 +394,32 @@ def t51_alu(
 				if do_b_inv:
 					cy_out.next = cy_in & bit_isone
 				else: # UNDEFINED
-					cy_out.next = work.DONTCARE
+					cy_out.next = work.DontCare(1, '-')
+		elif do_b_c_dir:
+			if do_b_op == 0b11:
+				cy_out.next = ~cy_in
+			elif do_b_op == 0b00:
+				cy_out.next = False
+			elif do_b_op == 0b01:
+				cy_out.next = True
+			else:
+				cy_out.next = False
+		elif do_a_cjne:
+			cy_out.next = cjne_cy
+		elif do_a_da:
+			cy_out.next = ada[8]
+		elif do_a_rrc:
+			cy_out.next = u_acc[0]
+		elif do_a_rlc:
+			cy_out.next = u_acc[7]
+		elif do_addsub:
+			cy_out.next = as_cy ^ do_a_subb
+		elif do_a_div:
+			cy_out.next = 0
+		elif do_a_mul:
+			cy_out.next = 1
+		else:
+			cy_out.next = work.DontCare(1, '-')
 
 
 	@always_comb
@@ -415,7 +427,7 @@ def t51_alu(
 		if do_addsub:
 			ac_out.next = as_ac
 		else:
-			ac_out.next = work.DONTCARE
+			ac_out.next = work.DontCare(1, '-')
 
 
 	@always_comb
@@ -425,7 +437,7 @@ def t51_alu(
 		elif do_a_div:
 			b_q.next = div_q[16:8]
 		else:
-			b_q.next = work.DONTCARE
+			b_q.next = work.DontCare(8, '-')
 
 	@always_comb
 	def logic_ov():
@@ -436,7 +448,7 @@ def t51_alu(
 		elif do_a_mul:
 			ov_out.next = mul_ov
 		else:
-			b_q.next = work.DONTCARE
+			ov_out.next = work.DontCare(1, '-')
 
 	@always_comb
 	def logic_idcpbl():
@@ -451,15 +463,19 @@ def t51_alu(
 		elif do_i_xrl:
 			id_r.next = iop ^ u_ia
 		elif do_a_xch:
+			id_r.next = u_acc
+		elif do_a_xchd:
 			id_r.next = concat(u_ia[8:4], u_acc[4:0])
-		elif do_b_ba_dir | do_b_mov:
+		elif do_b_ba_dir:
+			id_r.next = bit_result
+		elif do_b_mov:
 			id_r.next = bit_result
 		elif do_i_mov:
 			id_r.next = mov_q
 		elif do_i_movd:
 			id_r.next = ia_d
 		else:
-			id_r.next = work.DONTCARE
+			id_r.next = work.DontCare(8, '-')
 
 		
 
@@ -479,29 +495,36 @@ def t51_alu(
 		else:
 			djnz.next = False
 
+############################################################################
+# Rewritten DAA section
+	accu = Signal(vh.unsigned()[8+1:0])
+	add_lo = Signal(vh.unsigned()[8+1:0])
+	add_hi = Signal(vh.unsigned()[8+1:0])
+	add = Signal(vh.unsigned()[8+1:0])
+	accu_corr = Signal(vh.unsigned()[8+1:0])
 
-	accu = Signal(intbv()[9:])
-	add = [ Signal(intbv()[4:]) for _ in range(2) ]
 
-	accu_logic = [
-		accu.set(u_acc + concat(add[1], add[0])),
-		ada.set(concat((accu[8] | cy_in), accu[8:]))
-	]
-
-	@always(u_acc, cy_in, ac_in)
-	def daa():	  
+	@always(ac_in, accu)
+	def proc_1182():	
 		# async mux statements:		   
+		add_lo.next = 0
+		if (ac_in == True)	|  (accu[3+1:0] > 9):		 
+			add_lo.next = vh.to_unsigned(6, 9)
 
-		add[0].next = 0 # default
-		add[1].next = 0 # default
+	@always(cy_in, accu)
+	def proc_1214():	
+		# async mux statements:		   
+		add_hi.next = 0
+		if ((cy_in == True) | (accu[7+1:4] > 9))  |  ((accu[7+1:4] == 9) & (accu[3+1:0] > 9)):		  
+			add_hi.next = vh.to_unsigned(96, 9)
 
-		if (ac_in == True)	or  (u_acc[4:0] > 9):		 
-			add[0].next = 0b0110
 
-		if ((cy_in == True) or (accu[8:4] > 9)) \
-			or  ((accu[8:4] == 9) and (accu[4:0] > 9)):		  
-
-			add[1].next = 0b0110
+	_daa_wires_ = [
+		accu		    @assign@ ( _INTBV(acc) ),
+		add				@assign@ ( (add_lo + add_hi) ),
+		accu_corr		@assign@ ( (accu + add) ),
+		ada				@assign@ ( concat(accu_corr[8] | cy_in, accu_corr[7+1:0] ) ),
+	]
 
 
 	@always(ib, do_i_imm, u_acc)
@@ -529,7 +552,7 @@ def t51_alu(
 			# Duplicate			   
 			mov_q.next = ia_d
 		else:
-			mov_q.next = work.DONTCARE
+			mov_q.next = work.DontCare(8, '-')
 		
 #	@always(cjne_q)
 #	def select_cjne_q():	

@@ -19,7 +19,8 @@ def t51_ram(
 	int_addra_r : Byte.Output,
 	int_addrb   : Byte,
 	mem_a       : Byte.Output,
-	mem_b       : Byte.Output
+	mem_b       : Byte.Output,
+	INIT = True
 ):
 	"""T51 internal RAM. We use a rather generic model here for simulation
 only"""
@@ -32,7 +33,7 @@ only"""
 	n = 2 ** int_addra.size()
 
 	rambuf_a, rambuf_b = [
-		MemArray( [intbv()[8:] for _ in range(n) ] ) for _ in range(2)
+		MemArray( [intbv()[8:] for _ in range(n) ], init = INIT ) for _ in range(2)
 	]
 
 

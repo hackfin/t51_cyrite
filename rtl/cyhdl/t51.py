@@ -14,30 +14,56 @@ SLV8 = Signal.Type(vh.std_logic_vector, 8)
 
 _SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
 
-Undefined8 = Signal(intbv()[8:])
 
-from yosys.simulator import CXXRTL
+from cyrite.simulation import CoSimulator
+
+@hdlmacro
+def irq_select(ctx, a, b):
+	_if = ctx.If
+	for i in range(7):
+		walk = _if(a[i] == True).Then(
+			b.set(1 << i)
+		)
+		_if = walk.Elif
+	walk = walk.Else(b.set(0))
+
+	yield [ walk ]
 
 class T51_Factory(cyrite_factory.Module):
 	from t51_pack import t51_alu as t51_alu_vhdl_bb
 
 	from t51_alu import t51_alu as t51_alu_cyhdl_impl
+	from t51_glue import t51_glue as t51_glue_cyhdl_impl
 
 	def __init__(self, name, target, VARIANT = 0):
 		# Here we switch between blackbox and cyhdl-version of the module
 		#
-#		if issubclass(target, CXXRTL):
-#			# Assume RTL output, pick the cyhdl implementation
-#			self.t51_alu = self.t51_alu_cyhdl_impl
-#		else:
-#			# assume VHDL, use the blackbox config
-#			self.t51_alu = self.t51_alu_vhdl_bb
-#
-		if VARIANT == 1:
+		if issubclass(target, CoSimulator):
+			# Assume RTL output, pick the cyhdl implementation
 			self.t51_alu = self.t51_alu_cyhdl_impl
 		else:
-			# Known good
-			self.t51_alu = self.t51_alu_vhdl_bb
+			# assume VHDL, use the blackbox config
+
+			if VARIANT == 1:
+				self.t51_alu = self.t51_alu_cyhdl_impl
+				self.t51_glue = self.t51_glue_cyhdl_impl
+			else:
+				# Known good
+				self.t51_alu = self.t51_alu_vhdl_bb
+				self.t51_glue = self.t51_glue_cyhdl_impl
+
+		modules = self._MODULES[:]
+		self.vhdlfiles = self._VHDLFILES[:]
+
+		if VARIANT == 0:
+			 modules.append("MD")
+
+
+		self.vhdlfiles += [
+			"../vhdl/T51_%s.vhd" % n for n in 
+				modules
+		]
+
 
 		super().__init__(name, target)
 
@@ -84,9 +110,6 @@ class T51_Factory(cyrite_factory.Module):
 
 		acc = Byte()
 		b = Byte()
-		psw = Signal(intbv()[7:0]) # bit 0 is parity
-		psw_bits = [ Bool() for _ in range(7) ]
-		psw0 = Signal(bool())
 		ip = Byte()
 		sp = Signal(vh.unsigned()[7+1:0])
 		dpl0 = Byte()
@@ -201,15 +224,37 @@ class T51_Factory(cyrite_factory.Module):
 				last.next = False
 
 		# FIXME: Use RegisterSignal abstraction
-		psw_compose = [
-			psw.wireup( concat(*reversed(psw_bits)) )
+
+		PSW_BITS = {
+			"PAR" : 1,
+			"RSV" : 1,
+			"OV" : 1,
+			"RS0" : 1,
+			"RS1" : 1,
+			"F0" : 1,
+			"AC" : 1,
+			"CY" : 1,
+		}
+		psw = Signal(intbv()[8:])
+
+		psw_next = work.RegisterSignal("PSW_n1", PSW_BITS)
+
+
+		acc_xor = \
+			(acc[7] ^ acc[6] ^ acc[5] ^ acc[4] ^ acc[3] ^ acc[2] ^ acc[1] ^ acc[0])
+
+		psw_wiring = [
+			psw.wireup (concat (psw_next[:1], acc_xor) )
 		]
+
+
+		psw_reg = [ psw[4], psw[3] ]
 
 		@always(fcycle, icall, inst, inst1, inst2, int_addra_r, last, mem_b, old_mem_b, psw, rom_data, ready, sp, sfr_wr_i, res_bus)
 		def proc_1576():	
 			# async mux statements:		   
-			int_addra.next = Undefined8
-			int_addrb.next = concat("000", psw[4+1:3], "00", inst[0])
+			int_addra.next = 0
+			int_addrb.next = concat("000", *psw_reg, "00", inst[0])
 			rd_flag.next = False
 			rd_sfr_flag.next = False
 			if (inst[3+1:0] == 0b0000)	|  (inst[3+1:0] == 0b0010):		   
@@ -263,7 +308,7 @@ class T51_Factory(cyrite_factory.Module):
 					int_addra.next = rom_data
 					rd_flag.next = True
 			elif inst[3]  ==  True:		   
-				int_addra.next = concat("000", psw[4+1:3], inst[2+1:0])
+				int_addra.next = concat("000", *psw_reg, inst[2+1:0])
 				if (inst[7+1:4] == 0b1000)	&  (fcycle == 0b10):			
 					int_addra.next = inst1
 				if (inst[7+1:4] == 0b1010)	&  (fcycle == 0b01):			
@@ -271,7 +316,7 @@ class T51_Factory(cyrite_factory.Module):
 					rd_flag.next = True
 			if ((inst[7+1:5] != 0b001) | (inst[3+1:0] != 0b0010))  &  ((((rom_data[3+1:1] == 0b011) | (inst[3+1:1] == 0b011)) | (rom_data[7+1:1] == 0b1110001)) | (rom_data[7+1:1] == 0b1111001)):		  
 				if last  ==  True:			  
-					int_addrb.next = concat("000", psw[4+1:3], "00", rom_data[0])
+					int_addrb.next = concat("000", *psw_reg, "00", rom_data[0])
 					if ( FAST_CPU_C != 0 and (sfr_wr_i == True))  &  (int_addra_r == 0b11010000):				 
 						int_addrb.next = concat("000", res_bus[4+1:3], "00", rom_data[0])
 				rd_sfr_flag.next = True
@@ -401,7 +446,7 @@ class T51_Factory(cyrite_factory.Module):
 				movx_stall.next = False
 
 
-		bitnr_v = rom_data[2+1:0]
+		bitnr_v = rom_data[3:0]
 
 		@always_seq(clk.posedge, rst_n)
 		def select_inst1():	
@@ -449,7 +494,7 @@ class T51_Factory(cyrite_factory.Module):
 			@always_comb
 			def select_sfrdata():
 				if int_addra == 0b11010000:
-					sfr_rdata.next = concat(psw, psw0)
+					sfr_rdata.next = psw
 				elif int_addra == 0b11100000:
 					sfr_rdata.next = acc
 				elif int_addra == 0b11110000:
@@ -504,7 +549,7 @@ class T51_Factory(cyrite_factory.Module):
 			elif status_wr.CY  ==  True:		  
 				next_psw7.next = status_d.CY
 			else:
-				next_psw7.next = psw_bits[6]
+				next_psw7.next = psw_next.CY
 
 		@always(acc_q, acc_wr, acc)
 		def select_next_acc_z():	 
@@ -540,19 +585,14 @@ class T51_Factory(cyrite_factory.Module):
 				if fcycle  ==  0b11:				
 					acc.next = rom_data
 			if (sfr_wr_i == True)  &  (int_addra_r == 0b11010000):			  
-				psw_bits[6].next = res_bus[7]
-				psw_bits[5].next = res_bus[6]
-				psw_bits[4].next = res_bus[5]
-				psw_bits[3].next = res_bus[4]
-				psw_bits[2].next = res_bus[3]
-				psw_bits[1].next = res_bus[2]
-				psw_bits[0].next = res_bus[1]
+				psw_next[:1].next = res_bus[:1]
 			if status_wr.CY  ==  True:			
-				psw_bits[6].next = status_d.CY
+				psw_next.CY.next = status_d.CY
 			if status_wr.AC  ==  True:			
-				psw_bits[5].next = status_d.AC
+				psw_next.AC.next = status_d.AC
 			if status_wr.OV  ==  True:			
-				psw_bits[1].next = status_d.OV
+				psw_next.OV.next = status_d.OV
+
 
 		@always_seq(clk.posedge, rst_n)
 		def select_sp():	
@@ -768,20 +808,22 @@ class T51_Factory(cyrite_factory.Module):
 					int_trig_r.next = 0
 				if (ipending == True)  &  (icall == True):				  
 					# Nicer when procedural:
-					if int_trig_r[0]  ==  True:					   
-						int_acc.next = 0b0000001
-					elif int_trig_r[1]	==	True:					 
-						int_acc.next = 0b0000010
-					elif int_trig_r[2]	==	True:					 
-						int_acc.next = 0b0000100
-					elif int_trig_r[3]	==	True:					 
-						int_acc.next = 0b0001000
-					elif int_trig_r[4]	==	True:					 
-						int_acc.next = 0b0010000
-					elif int_trig_r[5]	==	True:					 
-						int_acc.next = 0b0100000
-					elif int_trig_r[6]	==	True:					 
-						int_acc.next = 0b1000000
+					irq_select(irq_handle, int_trig_r, int_acc)
+
+#					if int_trig_r[0]  ==  True:					   
+#						int_acc.next = 0b0000001
+#					elif int_trig_r[1]	==	True:					 
+#						int_acc.next = 0b0000010
+#					elif int_trig_r[2]	==	True:					 
+#						int_acc.next = 0b0000100
+#					elif int_trig_r[3]	==	True:					 
+#						int_acc.next = 0b0001000
+#					elif int_trig_r[4]	==	True:					 
+#						int_acc.next = 0b0010000
+#					elif int_trig_r[5]	==	True:					 
+#						int_acc.next = 0b0100000
+#					elif int_trig_r[6]	==	True:					 
+#						int_acc.next = 0b1000000
 				if inst  ==  0b00110010:				
 					if hpint  ==  False:					
 						lpint.next = False
@@ -1435,7 +1477,7 @@ class T51_Factory(cyrite_factory.Module):
 			sfr_wdata					 @assign@ ( res_bus ),
 			inst_skip					 @assign@ ( (ret_r | j_skip) ),
 			stall_pipe					 @assign@ ( (((((ri_stall | psw_stall) | acc_stall) | sp_stall) | movx_stall) & ~istart) ),
-			psw0						 @assign@ ( (((((((acc[7] ^ acc[6]) ^ acc[5]) ^ acc[4]) ^ acc[3]) ^ acc[2]) ^ acc[1]) ^ acc[0]) ),
+			# psw.PAR					     .set (  ),
 			ram_wdata					 @assign@ ( acc ),
 			ram_wr						 @assign@ ( ram_wr_i ),
 			dptr_inc					 @assign@ ( (concat(dph, dpl) + 1) ),
@@ -1462,8 +1504,8 @@ class T51_Factory(cyrite_factory.Module):
 			ia = _SLV(op_a),
 			ib = _SLV(op_b),
 			bit_pattern = _SLV(bit_pattern),
-			cy_in = psw[6],
-			ac_in = psw[5],
+			cy_in = psw_next.CY,
+			ac_in = psw_next.AC,
 			acc_q = acc_q,
 			b_q = b_q,
 			idcpbl_q = res_bus_slv,
@@ -1478,10 +1520,21 @@ class T51_Factory(cyrite_factory.Module):
 			ov_wr = ov_bits[1],
 		)
 
-		wirings = [
-			res_bus.wireup(res_bus_slv),
+		status_d.sigclass = 1
+
+		# For now, we have to put the PAsignals into always_comb
+		# because assignments in verilog don't yet resolve correctly.
+
+		@always_comb
+		def assignment():
 			status_d.assign(CY = cy_bits[0], AC = ac_bits[0], OV = ov_bits[0]),
 			status_wr.assign(CY = cy_bits[1], AC = ac_bits[1], OV = ov_bits[1]),
+
+
+		wirings = [
+			res_bus.wireup(res_bus_slv),
+			# status_d.assign(CY = cy_bits[0], AC = ac_bits[0], OV = ov_bits[0]),
+			# status_wr.assign(CY = cy_bits[1], AC = ac_bits[1], OV = ov_bits[1]),
 		]
 
 		return locals()

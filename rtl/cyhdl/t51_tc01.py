@@ -47,6 +47,7 @@ def t51_tc01(
 
 	# Signals
 
+	prescaler = Signal(intbv()[4:])
 
 	tmod = work.RegisterSignal("TMOD", {
 			"T0MOD" : 2,
@@ -178,10 +179,10 @@ def t51_tc01(
 		i0_r[0] = int0
 		i1_r[0] = int1
 		if prescaler  ==  0b1011:			 
-			prescaler = 0b0000
+			prescaler.next = 0b0000
 			tick12.next = True
 		else:
-			prescaler = (prescaler + 1)
+			prescaler.next = (prescaler + 1)
 		if FASTCOUNT  !=  0:			
 			tick12.next = True
 

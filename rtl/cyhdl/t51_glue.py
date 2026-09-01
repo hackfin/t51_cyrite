@@ -11,7 +11,9 @@ _INTBV = lambda x : vh.Cast(work._intbv, x)
 # Imports for 't51_glue':
 from t51_pack import *
 
-DONTCARE = work.DONTCARE
+# TODO: Use a generated SFR map decoder from the XML file
+
+import t51_defines as R
 
 @block
 def t51_glue(
@@ -100,36 +102,31 @@ def t51_glue(
 	int0_r = Signal(vh.std_logic_vector()[1+1:0])
 	int1_r = Signal(vh.std_logic_vector()[1+1:0])
 
-	if TRISTATE:
-		assert False
-	else:
-
-		@always_comb
-		def select_iodata():
-			if io_addr == 0b0001000:
-				io_rdata.next = tcon
-				selected.next = True
-			elif io_addr == 0b0000111:
-				io_rdata.next = pcon
-				selected.next = True
-			elif io_addr == 0b0101000:
-				io_rdata.next = ie
-				selected.next = True
-			else:
-				io_rdata.next = DONTCARE
-				selected.next = False
-				
+	@always_comb
+	def select_iodata():
+		if io_addr == R.TCON:
+			io_rdata.next = tcon
+			selected.next = True
+		elif io_addr == R.PCON:
+			io_rdata.next = pcon
+			selected.next = True
+		elif io_addr == R.IEN0_:
+			io_rdata.next = ie
+			selected.next = True
+		else:
+			io_rdata.next = work.DontCare(8, '-')
+			selected.next = False
 
 	@always_seq(clk.posedge, reset)
 	def handle_tcon():	
 		# async mux statements:		   
 		int0_r.next = concat(int0_r[0], int0)
 		int0_r.next = concat(int1_r[0], int1)
-		if (io_wr == True)	&  (io_addr_r == 0b0101000):			
+		if (io_wr == True)	&  (io_addr_r == R.IEN0_):			
 			ie.next = io_wdata
-		if (io_wr == True)	&  (io_addr_r == 0b0001000):			
+		if (io_wr == True)	&  (io_addr_r == R.TCON):			
 			tcon.next = _INTBV(io_wdata)
-		if (io_wr == True)	&  (io_addr_r == 0b0000111):			
+		if (io_wr == True)	&  (io_addr_r == R.PCON):			
 			pcon.next = io_wdata
 		if of0	==	True:			 
 			tcon[5].next = True
@@ -165,7 +162,7 @@ def t51_glue(
 			int_rq[0].next = tcon[1]
 
 	@always(ie, tcon)
-	def proc_4662():	
+	def proc_legacy_4662():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[1] == True))	&  (tcon[5] == True):		 
 			int_rq[1].next = True
@@ -173,7 +170,7 @@ def t51_glue(
 			int_rq[1].next = False
 
 	@always(ie, int1_r, tcon)
-	def proc_4668():	
+	def proc_legacy_4668():	
 		# ternary:		  
 		if (ie[7] == False)  |	(ie[2] == False):		 
 			int_rq[2].next = False
@@ -183,7 +180,7 @@ def t51_glue(
 			int_rq[2].next = tcon[3]
 
 	@always(ie, tcon)
-	def proc_4676():	
+	def proc_legacy_4676():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[3] == True))	&  (tcon[7] == True):		 
 			int_rq[3].next = True
@@ -191,7 +188,7 @@ def t51_glue(
 			int_rq[3].next = False
 
 	@always(ie, ri, ti)
-	def proc_4682():	
+	def proc_legacy_4682():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[4] == True))	&  ((ri == True) | (ti == True)):		 
 			int_rq[4].next = True
@@ -199,159 +196,38 @@ def t51_glue(
 			int_rq[4].next = False
 
 	@always(ie, of2)
-	def proc_4688():	
+	def proc_legacy_4688():	
 		# ternary:		  
 		if ((ie[7] == True) & (ie[5] == True))	&  (of2 == True):		 
 			int_rq[5].next = True
 		else:
 			int_rq[5].next = False
 
+
+	@work.decoder_generator(R, io_addr, io_addr_r, io_wr)
+	def decode():
+		"""Procedurally generated decoder. When the io_addr/io_addr_r pair
+matches the corresponding register address, mux through to the given pins.
+The pin definitions are taken from a resource specified in
+cyhdl_work/__init__.py"""
+		return {
+			'P0' : (p0_sel, p0_wr,),
+			'P1' : (p1_sel, p1_wr,),
+			'P2' : (p2_sel, p2_wr,),
+			'P3' : (p3_sel, p3_wr,),
+			# 'P4' : (p4_sel, p4_wr,),
+			'TH0' : (th0_sel, th0_wr,),
+			'TH1' : (th1_sel, th1_wr,),
+			'TL0' : (tl0_sel, tl0_wr,),
+			'TL1' : (tl1_sel, tl1_wr,),
+			'TMOD' : (tmod_sel, tmod_wr,),
+		}
+
+
+	# FIXME: implement all those
+	#
 	@always(io_addr)
-	def proc_4698():	
-		# ternary:		  
-		if io_addr	==	0b0000000:		  
-			p0_sel.next = True
-		else:
-			p0_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4704():	
-		# ternary:		  
-		if (io_addr_r == 0b0000000)  &	(io_wr == True):		
-			p0_wr.next = True
-		else:
-			p0_wr.next = False
-
-	@always(io_addr)
-	def proc_4710():	
-		# ternary:		  
-		if io_addr	==	0b0010000:		  
-			p1_sel.next = True
-		else:
-			p1_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4716():	
-		# ternary:		  
-		if (io_addr_r == 0b0010000)  &	(io_wr == True):		
-			p1_wr.next = True
-		else:
-			p1_wr.next = False
-
-	@always(io_addr)
-	def proc_4722():	
-		# ternary:		  
-		if io_addr	==	0b0100000:		  
-			p2_sel.next = True
-		else:
-			p2_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4728():	
-		# ternary:		  
-		if (io_addr_r == 0b0100000)  &	(io_wr == True):		
-			p2_wr.next = True
-		else:
-			p2_wr.next = False
-
-	@always(io_addr)
-	def proc_4734():	
-		# ternary:		  
-		if io_addr	==	0b0110000:		  
-			p3_sel.next = True
-		else:
-			p3_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4740():	
-		# ternary:		  
-		if (io_addr_r == 0b0110000)  &	(io_wr == True):		
-			p3_wr.next = True
-		else:
-			p3_wr.next = False
-
-	@always(io_addr)
-	def proc_4746():	
-		# ternary:		  
-		if io_addr	==	0b0001001:		  
-			tmod_sel.next = True
-		else:
-			tmod_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4752():	
-		# ternary:		  
-		if (io_addr_r == 0b0001001)  &	(io_wr == True):		
-			tmod_wr.next = True
-		else:
-			tmod_wr.next = False
-
-	@always(io_addr)
-	def proc_4758():	
-		# ternary:		  
-		if io_addr	==	0b0001010:		  
-			tl0_sel.next = True
-		else:
-			tl0_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4764():	
-		# ternary:		  
-		if (io_addr_r == 0b0001010)  &	(io_wr == True):		
-			tl0_wr.next = True
-		else:
-			tl0_wr.next = False
-
-	@always(io_addr)
-	def proc_4770():	
-		# ternary:		  
-		if io_addr	==	0b0001011:		  
-			tl1_sel.next = True
-		else:
-			tl1_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4776():	
-		# ternary:		  
-		if (io_addr_r == 0b0001011)  &	(io_wr == True):		
-			tl1_wr.next = True
-		else:
-			tl1_wr.next = False
-
-	@always(io_addr)
-	def proc_4782():	
-		# ternary:		  
-		if io_addr	==	0b0001100:		  
-			th0_sel.next = True
-		else:
-			th0_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4788():	
-		# ternary:		  
-		if (io_addr_r == 0b0001100)  &	(io_wr == True):		
-			th0_wr.next = True
-		else:
-			th0_wr.next = False
-
-	@always(io_addr)
-	def proc_4794():	
-		# ternary:		  
-		if io_addr	==	0b0001101:		  
-			th1_sel.next = True
-		else:
-			th1_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_4800():	
-		# ternary:		  
-		if (io_addr_r == 0b0001101)  &	(io_wr == True):		
-			th1_wr.next = True
-		else:
-			th1_wr.next = False
-
-	@always(io_addr)
-	def proc_4806():	
+	def proc_legacy_4806():	
 		# ternary:		  
 		if io_addr	==	0b1001000:		  
 			t2con_sel.next = True
@@ -359,7 +235,7 @@ def t51_glue(
 			t2con_sel.next = False
 
 	@always(io_addr_r, io_wr)
-	def proc_4812():	
+	def proc_legacy_4812():	
 		# ternary:		  
 		if (io_addr_r == 0b1001000)  &	(io_wr == True):		
 			t2con_wr.next = True
@@ -367,7 +243,7 @@ def t51_glue(
 			t2con_wr.next = False
 
 	@always(io_addr)
-	def proc_4818():	
+	def proc_legacy_4818():	
 		# ternary:		  
 		if io_addr	==	0b1001010:		  
 			rcap2l_sel.next = True
@@ -375,7 +251,7 @@ def t51_glue(
 			rcap2l_sel.next = False
 
 	@always(io_addr_r, io_wr)
-	def proc_4824():	
+	def proc_legacy_4824():	
 		# ternary:		  
 		if (io_addr_r == 0b1001010)  &	(io_wr == True):		
 			rcap2l_wr.next = True
@@ -383,7 +259,7 @@ def t51_glue(
 			rcap2l_wr.next = False
 
 	@always(io_addr)
-	def proc_4830():	
+	def proc_legacy_4830():	
 		# ternary:		  
 		if io_addr	==	0b1001011:		  
 			rcap2h_sel.next = True
@@ -391,7 +267,7 @@ def t51_glue(
 			rcap2h_sel.next = False
 
 	@always(io_addr_r, io_wr)
-	def proc_4836():	
+	def proc_legacy_4836():	
 		# ternary:		  
 		if (io_addr_r == 0b1001011)  &	(io_wr == True):		
 			rcap2h_wr.next = True
@@ -399,7 +275,7 @@ def t51_glue(
 			rcap2h_wr.next = False
 
 	@always(io_addr)
-	def proc_4842():	
+	def proc_legacy_4842():	
 		# ternary:		  
 		if io_addr	==	0b1001100:		  
 			tl2_sel.next = True
@@ -407,7 +283,7 @@ def t51_glue(
 			tl2_sel.next = False
 
 	@always(io_addr_r, io_wr)
-	def proc_4848():	
+	def proc_legacy_4848():	
 		# ternary:		  
 		if (io_addr_r == 0b1001100)  &	(io_wr == True):		
 			tl2_wr.next = True
@@ -415,7 +291,7 @@ def t51_glue(
 			tl2_wr.next = False
 
 	@always(io_addr)
-	def proc_4854():	
+	def proc_legacy_4854():	
 		# ternary:		  
 		if io_addr	==	0b1001101:		  
 			th2_sel.next = True
@@ -423,7 +299,7 @@ def t51_glue(
 			th2_sel.next = False
 
 	@always(io_addr_r, io_wr)
-	def proc_4860():	
+	def proc_legacy_4860():	
 		# ternary:		  
 		if (io_addr_r == 0b1001101)  &	(io_wr == True):		
 			th2_wr.next = True
@@ -431,7 +307,7 @@ def t51_glue(
 			th2_wr.next = False
 
 	@always(io_addr)
-	def proc_4866():	
+	def proc_legacy_4866():	
 		# ternary:		  
 		if io_addr	==	0b0011000:		  
 			scon_sel.next = True
@@ -439,7 +315,7 @@ def t51_glue(
 			scon_sel.next = False
 
 	@always(io_addr_r, io_wr)
-	def proc_4872():	
+	def proc_legacy_4872():	
 		# ternary:		  
 		if (io_addr_r == 0b0011000)  &	(io_wr == True):		
 			scon_wr.next = True
@@ -447,7 +323,7 @@ def t51_glue(
 			scon_wr.next = False
 
 	@always(io_addr)
-	def proc_4878():	
+	def proc_legacy_4878():	
 		# ternary:		  
 		if io_addr	==	0b0011001:		  
 			sbuf_sel.next = True
@@ -455,7 +331,7 @@ def t51_glue(
 			sbuf_sel.next = False
 
 	@always(io_addr_r, io_wr)
-	def proc_4884():	
+	def proc_legacy_4884():	
 		# ternary:		  
 		if (io_addr_r == 0b0011001)  &	(io_wr == True):		
 			sbuf_wr.next = True

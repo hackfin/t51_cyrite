@@ -5,7 +5,7 @@ Modifications applied
 """
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
-
+from myirl.library.array import ReadOnlyIndexer
 import cyhdl_work as work
 
 from cyhdl_work.types import *
@@ -20,12 +20,30 @@ IOPort = Signal.Type(vh.std_logic_vector, 8)
 
 _INTBV = lambda x : vh.Cast(work._intbv, x)
 
+@hdlmacro
+def pmux_generator(ctx, sigarray, selectors, data):
+	"Parallel multiplexer with selector signals"
+	n = len(sigarray)
+	_if = ctx.If
+	for i in range(0, n):
+		walk =	_if(selectors[i]).Then(
+				data.set(sigarray[i])
+			)
+		_if = walk.Elif
+
+	walk = walk.Else( data.set( work.DontCare(8, "-") ) )
+	yield [ walk ]
+	
+
+
 class T51(T51_Factory):
 	from t51_port import t51_port
 	from t51_glue import t51_glue
 	from t51_tc01 import t51_tc01
 	from t51_tc2 import t51_tc2
 	from t51_uart import t51_uart
+
+
 	
 	@cyrite_factory.block_component
 	def t8052(self,
@@ -59,9 +77,9 @@ class T51(T51_Factory):
 		xram_dat_i					: Byte,
 		
 		TRISTATE					: int = 0,
-		ROMADDRESSWIDTH				: vh.integer = 16,
-		IRAMADDRESSWIDTH			: vh.integer = 8,
-		XRAMADDRESSWIDTH			: vh.integer = 11): 
+		ROMADDRESSWIDTH				: int = 16,
+		IRAMADDRESSWIDTH			: int = 8,
+		XRAMADDRESSWIDTH			: int = 11): 
 		"rtl"
 
 		EXT_MUX_IN_NUM = 8
@@ -156,7 +174,7 @@ class T51(T51_Factory):
 			else:
 				ready.next = True
 
-		@always_seq(clk, rst_n)
+		@always_seq(clk.posedge, rst_n)
 		def proc_1590():	
 			io_addr_r.next = io_addr
 			if ready  ==  True:			   
@@ -201,6 +219,18 @@ class T51(T51_Factory):
 			io_rdata_en[7]				 @assign@ ( (scon_sel | sbuf_sel) ),
 		]
 
+############################################################################
+# Muxer
+
+		@always_comb
+		def pmux():
+			"Procedurally generated parallel muxer"
+			pmux_generator(self, io_rdata_arr, io_rdata_en, io_rdata)
+
+
+############################################################################
+# ROM INSTANCING
+
 		with open("/tmp/patched.bin", "rb") as f:
 			ROM_DATA = f.read()
 			f.close()
@@ -209,8 +239,8 @@ class T51(T51_Factory):
 		 # instance 'rom52'
 		rom = work.rom52(
 			clk = clk,
-			i = rom_addr,
-			o = rom_data,
+			a = rom_addr,
+			d = rom_data,
 			INITDATA = ROM_DATA
 		)
 
@@ -431,31 +461,38 @@ class T51(T51_Factory):
 			uart_clk = uart_clk,
 			f = of2
 		)
-		
-		 # instance 't51_uart'
-		uart = self.t51_uart(
-			FASTCOUNT = 0, TRISTATE = TRISTATE,
 
-			clk = clk,
-			rst_n = rst_n,
-			user2 = user2,
-			uset2 = uset2,
-			baudc2 = uart_clk,
-			baudc1 = of1,
-			sc_sel = scon_sel,
-			sb_sel = sbuf_sel,
-			sc_wr = scon_wr,
-			sb_wr = sbuf_wr,
-			smod = smod,
-			data_in = _SLV(io_wdata),
-			data_out = io_rdata_arr[7],
-			rxd = rxd,
-			rxd_iso = rxd_iso,
-			rxd_o = rxd_o,
-			txd = txd,
-			ri = ri,
-			ti = ti
-		)
+		if 0:
+		
+			 # instance 't51_uart'
+			uart = self.t51_uart(
+				FASTCOUNT = 0, TRISTATE = TRISTATE,
+
+				clk = clk,
+				rst_n = rst_n,
+				user2 = user2,
+				uset2 = uset2,
+				baudc2 = uart_clk,
+				baudc1 = of1,
+				sc_sel = scon_sel,
+				sb_sel = sbuf_sel,
+				sc_wr = scon_wr,
+				sb_wr = sbuf_wr,
+				smod = smod,
+				data_in = _SLV(io_wdata),
+				data_out = io_rdata_arr[7],
+				rxd = rxd,
+				rxd_iso = rxd_iso,
+				rxd_o = rxd_o,
+				txd = txd,
+				ri = ri,
+				ti = ti
+			)
+
+		else:
+			uart_static_wiring = [
+				io_rdata_arr[7].wireup(0xaa)
+			]
 
 		return locals()
 
@@ -463,11 +500,15 @@ class T51(T51_Factory):
 class T51_VHDL(T51):
 	# Imports for 't8052':
 	import t51_pack as _p
-
+	
+	_VHDLFILES = []
 
 	t51_port  = _p.t51_port
 	t51_glue  = _p.t51_glue
 	t51_tc01  = _p.t51_tc01
 	t51_tc2   = _p.t51_tc2
 	t51_uart  = _p.t51_uart
+
+	_MODULES = ["Pack"]
+
 

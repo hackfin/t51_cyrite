@@ -78,199 +78,201 @@ def t51_uart(
 	tx_bit_cnt = Signal(intbv()[4:])
 	tick6 = Signal(bool())
 
-	if TRISTATE:
-		assert False
-	else:
-		@always_comb
-		def select_dout():
-			if sc_sel == True:
-				data_out.next = scon
-			elif sb_sel == True:
-				data_out.next = sbuf
-			else:
-				data_out.next = work.DONTCARE
 
-	wirings = [
-		rxd_o.wireup(rxd_int)
-	]
+	# Currently fully disabled, drivers broken
+	if 0:
 
-	@always_seq(clk.posedge, rst_n)
-	def proc_1202():	
-		# async mux statements:		   
-		if sc_wr  ==  True:			   
-			scon[7+1:3].next = _INTBV(data_in[7+1:3])
+		prescaler = Signal(intbv()[3:])
 
-	@always(uset2, baudc2, baudc1, baudc1_g, scon, baudfix)
-	def proc_3836():	
-		# ternary:		  
-		if scon[6]	==	True:		 
-			baud16t_i.next = ((uset2 & baudc2) | ((~uset2 & baudc1) & baudc1_g))
+		if TRISTATE:
+			assert False
 		else:
-			baud16t_i.next = baudfix
-
-	@always(user2, baudc2, baudc1, baudc1_g, scon, baudfix)
-	def proc_3842():	
-		# ternary:		  
-		if scon[6]	==	True:		 
-			baud16r_i.next = ((user2 & baudc2) | ((~user2 & baudc1) & baudc1_g))
-		else:
-			baud16r_i.next = baudfix
-
-	@always_seq(clk.posedge, rst_n)
-	def proc_1292():	
-		baud_cnt = intbv()[5:]
-		baudfix.next = False
-		if (smod == False)	&  (baudc1 == True):			
-			baudc1_g.next = ~baudc1_g
-		elif smod  ==  True:			
-			baudc1_g.next = True
-		if (baud_cnt[4+1:0] == 0b11111)  &	((smod == True) | (baud_cnt[5] == True)):			 
-			baudfix.next = True
-		baud_cnt = (baud_cnt - 1)
-
-	@always_seq(clk.posedge, rst_n)
-	def proc_1376():	
-		# async mux statements:		   
-		samples = intbv(0b11)[2:]
-
-		if baud16r_i  ==  True:			   
-			samples[1] = samples[0]
-			samples[0] = rxd
-		if samples	==	0b00:			 
-			rx_filtered.next = False
-		if samples	==	0b11:			 
-			rx_filtered.next = True
-
-	@always_seq(clk.posedge, rst_n)
-	def proc_1448():	
-		# async mux statements:		   
-		if sc_wr  ==  True:			   
-			scon[0].next = data_in[0]
-			scon[2].next = data_in[2]
-		if scon[7+1:6]	!=	0b00:			 
-			rx_shifting.next = False
-		if ((scon[7+1:6] == 0b00) & (tick6 == True))  &  ((txd_i == False) | (rx_bit_cnt == 0)):			
-			if ((scon[4] == True) & (scon[0] == False))  &	(rx_bit_cnt == 0):				  
-				rx_shifting.next = True
-				rx_bit_cnt.next = 1
-			elif rx_bit_cnt  !=  0:				   
-				if rx_bit_cnt  ==  8:					 
-					rx_shifting.next = False
-					scon[0].next = True
-					sbuf.next = concat(rx_filtered, rx_shiftreg[7+1:1])
-					rx_bit_cnt.next = 0
+			@always_comb
+			def select_dout():
+				if sc_sel == True:
+					data_out.next = scon
+				elif sb_sel == True:
+					data_out.next = sbuf
 				else:
-					rx_shiftreg.next = concat("0", rx_filtered, rx_shiftreg[7+1:1])
-					rx_bit_cnt.next = (rx_bit_cnt + 1)
-		elif (baud16r_i == True)  &  (scon[4] == True):			   
-			if (rx_bit_cnt == 0)  &  ((rx_filtered == True) | (bit_phase == 0b0111)):				 
-				bit_phase.next = 0b0000
+					data_out.next = work.DONTCARE
+
+		wirings = [
+			rxd_o.wireup(rxd_int)
+		]
+
+
+		@always(uset2, baudc2, baudc1, baudc1_g, scon, baudfix)
+		def proc_3836():	
+			# ternary:		  
+			if scon[6]	==	True:		 
+				baud16t_i.next = ((uset2 & baudc2) | ((~uset2 & baudc1) & baudc1_g))
 			else:
-				bit_phase.next = (bit_phase + 1)
-			if rx_bit_cnt  ==  0:				 
-				if bit_phase  ==  0b0111:					 
-					rx_bit_cnt.next = (rx_bit_cnt + 1)
-			elif bit_phase	==	0b1111:				   
-				rx_bit_cnt.next = (rx_bit_cnt + 1)
-				if ((scon[7] == False) & (rx_bit_cnt == 9))  |	((scon[7] == True) & (rx_bit_cnt == 10)):					 
-					rx_bit_cnt.next = 0
-					if scon[5] == False and rx_shiftreg[8] == False:
+				baud16t_i.next = baudfix
+
+		@always(user2, baudc2, baudc1, baudc1_g, scon, baudfix)
+		def proc_3842():	
+			# ternary:		  
+			if scon[6]	==	True:		 
+				baud16r_i.next = ((user2 & baudc2) | ((~user2 & baudc1) & baudc1_g))
+			else:
+				baud16r_i.next = baudfix
+
+		@always_seq(clk.posedge, rst_n)
+		def proc_1292():	
+			baud_cnt = intbv()[5:]
+			baudfix.next = False
+			if (smod == False)	&  (baudc1 == True):			
+				baudc1_g.next = ~baudc1_g
+			elif smod  ==  True:			
+				baudc1_g.next = True
+			if (baud_cnt[4+1:0] == 0b11111)  &	((smod == True) | (baud_cnt[5] == True)):			 
+				baudfix.next = True
+			baud_cnt = (baud_cnt - 1)
+
+		@always_seq(clk.posedge, rst_n)
+		def proc_1376():	
+			# async mux statements:		   
+			samples = intbv(0b11)[2:]
+
+			if baud16r_i  ==  True:			   
+				samples[1] = samples[0]
+				samples[0] = rxd
+			if samples	==	0b00:			 
+				rx_filtered.next = False
+			if samples	==	0b11:			 
+				rx_filtered.next = True
+
+		@always_seq(clk.posedge, rst_n)
+		def proc_1448():	
+			# async mux statements:		   
+			if sc_wr  ==  True:			   
+				scon[0].next = data_in[0]
+				scon[2].next = data_in[2]
+				scon[1].next = data_in[1]
+				scon[7+1:3].next = _INTBV(data_in[7+1:3])
+
+			if scon[7+1:6]	!=	0b00:			 
+				rx_shifting.next = False
+			if ((scon[7+1:6] == 0b00) & (tick6 == True))  &  ((txd_i == False) | (rx_bit_cnt == 0)):			
+				if ((scon[4] == True) & (scon[0] == False))  &	(rx_bit_cnt == 0):				  
+					rx_shifting.next = True
+					rx_bit_cnt.next = 1
+				elif rx_bit_cnt  !=  0:				   
+					if rx_bit_cnt  ==  8:					 
+						rx_shifting.next = False
 						scon[0].next = True
-					if scon[7+1:5]	==	0b010:						  
-						scon[2].next = rx_filtered
-					if scon[7]	==	True:						 
-						scon[2].next = rx_shiftreg[8]
-					sbuf.next = rx_shiftreg[7+1:0]
-				else:
-					if scon[7]	==	True:						 
-						rx_shiftreg.next = concat(rx_filtered, rx_shiftreg[8+1:1])
+						sbuf.next = concat(rx_filtered, rx_shiftreg[7+1:1])
+						rx_bit_cnt.next = 0
 					else:
 						rx_shiftreg.next = concat("0", rx_filtered, rx_shiftreg[7+1:1])
-
-	@always_seq(clk.posedge, rst_n)
-	def proc_1844():	
-		tx_cnt = intbv(0)[4:]
-		tx_tick.next = False
-		if baud16t_i  ==  True:			   
-			if tx_cnt  ==  0b1111:				  
-				tx_tick.next = True
-			tx_cnt = (tx_cnt + 1)
-
-	@always_seq(clk.posedge, rst_n)
-	def proc_1912():	
-		if sc_wr  ==  True:			   
-			scon[1].next = data_in[1]
-		if sb_wr  ==  True:			   
-			tx_data.next = data_in
-			tx_start.next = True
-		if scon[7+1:6]	!=	0b00:			 
-			tx_shifting.next = False
-		if (tick6 == True)	&  ((rx_shifting == True) | (tx_shifting == True)):			   
-			txd_i.next = ~txd_i
-		if ((scon[7+1:6] == 0b00) & (tick6 == True))  &  ((txd_i == False) | (tx_bit_cnt == 0)):			
-			if (tx_start == True)  &  (tx_bit_cnt == 0):				
-				# tx_shiftreg[6+1:0].next = tx_data[7+1:1]
-				tx_shiftreg.next = concat("00", tx_data[7+1:1])
-				tx_shifting.next = True
-				tx_bit_cnt.next = 1
-				tx_start.next = False
-				rxd_int.next = tx_data[0]
-			elif tx_bit_cnt  !=  0:				   
-				if tx_bit_cnt  ==  8:					 
-					tx_shifting.next = False
-					scon[1].next = True
-					rxd_int.next = True
-					tx_bit_cnt.next = 0
+						rx_bit_cnt.next = (rx_bit_cnt + 1)
+			elif (baud16r_i == True)  &  (scon[4] == True):			   
+				if (rx_bit_cnt == 0)  &  ((rx_filtered == True) | (bit_phase == 0b0111)):				 
+					bit_phase.next = 0b0000
 				else:
-					rxd_int.next = tx_shiftreg[0]
-					tx_bit_cnt.next = (tx_bit_cnt + 1)
-				# tx_shiftreg[7+1:0].next = tx_shiftreg[8+1:1]
-				tx_shiftreg.next = concat("0", tx_shiftreg[8+1:1])
-		elif tx_tick  ==  True:			   
-			# case sequence
-			if tx_bit_cnt == 0:
-				if tx_start  ==  True:					  
+					bit_phase.next = (bit_phase + 1)
+				if rx_bit_cnt  ==  0:				 
+					if bit_phase  ==  0b0111:					 
+						rx_bit_cnt.next = (rx_bit_cnt + 1)
+				elif bit_phase	==	0b1111:				   
+					rx_bit_cnt.next = (rx_bit_cnt + 1)
+					if ((scon[7] == False) & (rx_bit_cnt == 9))  |	((scon[7] == True) & (rx_bit_cnt == 10)):					 
+						rx_bit_cnt.next = 0
+						if scon[5] == False and rx_shiftreg[8] == False:
+							scon[0].next = True
+						if scon[7+1:5]	==	0b010:						  
+							scon[2].next = rx_filtered
+						if scon[7]	==	True:						 
+							scon[2].next = rx_shiftreg[8]
+						sbuf.next = rx_shiftreg[7+1:0]
+					else:
+						if scon[7]	==	True:						 
+							rx_shiftreg.next = concat(rx_filtered, rx_shiftreg[8+1:1])
+						else:
+							rx_shiftreg.next = concat("0", rx_filtered, rx_shiftreg[7+1:1])
+
+		@always_seq(clk.posedge, rst_n)
+		def proc_1844():	
+			tx_cnt = intbv(0)[4:]
+			tx_tick.next = False
+			if baud16t_i  ==  True:			   
+				if tx_cnt  ==  0b1111:				  
+					tx_tick.next = True
+				tx_cnt = (tx_cnt + 1)
+
+		@always_seq(clk.posedge, rst_n)
+		def proc_1912():	
+			if sb_wr  ==  True:			   
+				tx_data.next = data_in
+				tx_start.next = True
+			if scon[7+1:6]	!=	0b00:			 
+				tx_shifting.next = False
+			if (tick6 == True)	&  ((rx_shifting == True) | (tx_shifting == True)):			   
+				txd_i.next = ~txd_i
+			if ((scon[7+1:6] == 0b00) & (tick6 == True))  &  ((txd_i == False) | (tx_bit_cnt == 0)):			
+				if (tx_start == True)  &  (tx_bit_cnt == 0):				
+					# tx_shiftreg[6+1:0].next = tx_data[7+1:1]
+					tx_shiftreg.next = concat("00", tx_data[7+1:1])
+					tx_shifting.next = True
 					tx_bit_cnt.next = 1
-				txd_i.next = True
-			elif tx_bit_cnt == 1:
-				tx_shiftreg.next = concat(scon[3], tx_data)
-				tx_start.next = False
-				txd_i.next = False
-				tx_bit_cnt.next = (tx_bit_cnt + 1)
-			else:
-				tx_bit_cnt.next = (tx_bit_cnt + 1)
-				if scon[7]	==	True:					 
-					if tx_bit_cnt  ==  10:						  
-						tx_bit_cnt.next = 0
+					tx_start.next = False
+					rxd_int.next = tx_data[0]
+				elif tx_bit_cnt  !=  0:				   
+					if tx_bit_cnt  ==  8:					 
+						tx_shifting.next = False
 						scon[1].next = True
+						rxd_int.next = True
+						tx_bit_cnt.next = 0
+					else:
+						rxd_int.next = tx_shiftreg[0]
+						tx_bit_cnt.next = (tx_bit_cnt + 1)
+					# tx_shiftreg[7+1:0].next = tx_shiftreg[8+1:1]
+					tx_shiftreg.next = concat("0", tx_shiftreg[8+1:1])
+			elif tx_tick  ==  True:			   
+				# case sequence
+				if tx_bit_cnt == 0:
+					if tx_start  ==  True:					  
+						tx_bit_cnt.next = 1
+					txd_i.next = True
+				elif tx_bit_cnt == 1:
+					tx_shiftreg.next = concat(scon[3], tx_data)
+					tx_start.next = False
+					txd_i.next = False
+					tx_bit_cnt.next = (tx_bit_cnt + 1)
 				else:
-					if tx_bit_cnt  ==  9:						 
-						tx_bit_cnt.next = 0
-						scon[1].next = True
-				txd_i.next = tx_shiftreg[0]
-				# tx_shiftreg[7+1:0].next = tx_shiftreg[8+1:1]
-				tx_shiftreg.next = concat("0", tx_shiftreg[8+1:1])
-			
+					tx_bit_cnt.next = (tx_bit_cnt + 1)
+					if scon[7]	==	True:					 
+						if tx_bit_cnt  ==  10:						  
+							tx_bit_cnt.next = 0
+							scon[1].next = True
+					else:
+						if tx_bit_cnt  ==  9:						 
+							tx_bit_cnt.next = 0
+							scon[1].next = True
+					txd_i.next = tx_shiftreg[0]
+					# tx_shiftreg[7+1:0].next = tx_shiftreg[8+1:1]
+					tx_shiftreg.next = concat("0", tx_shiftreg[8+1:1])
+				
 
-	@always_seq(clk.posedge, rst_n)
-	def proc_2260():	
-		tick6.next = False
-		if prescaler  ==  0b101:			
-			prescaler = 0b000
-			tick6.next = True
-		else:
-			prescaler = (prescaler + 1)
-		if FASTCOUNT  !=  0:			
-			tick6.next = True
+		@always_seq(clk.posedge, rst_n)
+		def proc_2260():	
+			tick6.next = False
+			if prescaler  ==  0b101:			
+				prescaler.next = 0b000
+				tick6.next = True
+			else:
+				prescaler.next = (prescaler + 1)
+			if FASTCOUNT  !=  0:			
+				tick6.next = True
 
 
-	###### Wirings: ######
-	_wires_ = [
-		ri							 @assign@ ( scon[0] ),
-		rxd_iso						 @assign@ ( tx_shifting ),
-		ti							 @assign@ ( scon[1] ),
-		txd							 @assign@ ( txd_i ),
-	]
+		###### Wirings: ######
+		_wires_ = [
+			ri							 @assign@ ( scon[0] ),
+			rxd_iso						 @assign@ ( tx_shifting ),
+			ti							 @assign@ ( scon[1] ),
+			txd							 @assign@ ( txd_i ),
+		]
 
 
 	return locals()

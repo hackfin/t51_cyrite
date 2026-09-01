@@ -33,26 +33,22 @@ def t51_port(
 
 	# Signals
 
-	port_output = Signal(vh.std_logic_vector()[7+1:0])
+	port_output = Signal(vh.std_logic_vector(-1)[7+1:0])
 	port_input = Signal(vh.std_logic_vector()[7+1:0])
 
-	@always(clk.posedge)
+	@always_seq(clk.posedge, rst_n)
 	def output_worker():	
 		if wr  ==  True:			
 			port_output.next = data_in
 
 
-	if TRISTATE:
-		assert False
-	else:
-
-		@always(port_output, port_input, sel, rd_rmw)
-		def select_io():
-			if sel:
-				if rd_rmw:
-					data_out.next = port_output
-				else:
-					data_out.next = port_input
+	@always(port_output, port_input, sel, rd_rmw)
+	def select_io():
+		if sel:
+			if rd_rmw:
+				data_out.next = port_output
+			else:
+				data_out.next = port_input
 
 	###### Wirings: ######
 	_wires_ = [

@@ -4,13 +4,16 @@ include ~/src/pyrite/projects/masoc/convert.mk
 CURDIR = $(shell pwd)
 
 %.py: ../vhdl/%.vhd
-				$(V2C) $< -d -w $(CURDIR)/work/work-obj93.cf
+	$(V2C) $< -d -w $(CURDIR)/work/work-obj93.cf
+
+%.py: %.vhdl
+	$(V2C) $< -d -w $(CURDIR)/work/work-obj93.cf
 
 %_Pack.py: ../vhdl/%_Pack.vhd
-				$(V2C) $< -d -l -w $(CURDIR)/work/work-obj93.cf
+	$(V2C) $< -d -l -w $(CURDIR)/work/work-obj93.cf
 
 %.py: ../../bench/vhdl/%.vhd
-				$(V2C) $< -d -w $(CURDIR)/work/work-obj93.cf
+	$(V2C) $< -d -w $(CURDIR)/work/work-obj93.cf
 
 NOT_CONVERTING = T51_RAM
 
