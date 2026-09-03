@@ -5,7 +5,7 @@
 #
 from cyhdl import *
 
-from cyhdl_work.types import *
+from .cyhdl_work.types import *
 
 @block
 def t51_md(

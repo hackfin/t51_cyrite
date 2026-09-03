@@ -4,16 +4,16 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 """
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
-import cyhdl_work as work
+from . import cyhdl_work as work
 
 _INTBV = lambda x : vh.Cast(work._intbv, x)
 
 # Imports for 't51_glue':
-from t51_pack import *
+from .t51_pack import *
 
 # TODO: Use a generated SFR map decoder from the XML file
 
-import t51_defines as R
+from . import t51_defines as R
 
 @block
 def t51_glue(
@@ -218,125 +218,17 @@ cyhdl_work/__init__.py"""
 			# 'P4' : (p4_sel, p4_wr,),
 			'TH0' : (th0_sel, th0_wr,),
 			'TH1' : (th1_sel, th1_wr,),
+			# 'TH2' : (th2_sel, th2_wr,),
 			'TL0' : (tl0_sel, tl0_wr,),
 			'TL1' : (tl1_sel, tl1_wr,),
+			# 'TL2' : (tl2_sel, tl2_wr,),
 			'TMOD' : (tmod_sel, tmod_wr,),
+			# 'T2CON' : (t2con_sel, t2con_wr,),
+			'S0CON' : (scon_sel, scon_wr,),
+			'S0BUF' : (sbuf_sel, sbuf_wr,),
+			# 'RCAP2L' : (rcap2l_sel, rcap2l_wr,),
+			# 'RCAP2H' : (rcap2h_sel, rcap2h_wr,),
 		}
-
-
-	# FIXME: implement all those
-	#
-	@always(io_addr)
-	def proc_legacy_4806():	
-		# ternary:		  
-		if io_addr	==	0b1001000:		  
-			t2con_sel.next = True
-		else:
-			t2con_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_legacy_4812():	
-		# ternary:		  
-		if (io_addr_r == 0b1001000)  &	(io_wr == True):		
-			t2con_wr.next = True
-		else:
-			t2con_wr.next = False
-
-	@always(io_addr)
-	def proc_legacy_4818():	
-		# ternary:		  
-		if io_addr	==	0b1001010:		  
-			rcap2l_sel.next = True
-		else:
-			rcap2l_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_legacy_4824():	
-		# ternary:		  
-		if (io_addr_r == 0b1001010)  &	(io_wr == True):		
-			rcap2l_wr.next = True
-		else:
-			rcap2l_wr.next = False
-
-	@always(io_addr)
-	def proc_legacy_4830():	
-		# ternary:		  
-		if io_addr	==	0b1001011:		  
-			rcap2h_sel.next = True
-		else:
-			rcap2h_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_legacy_4836():	
-		# ternary:		  
-		if (io_addr_r == 0b1001011)  &	(io_wr == True):		
-			rcap2h_wr.next = True
-		else:
-			rcap2h_wr.next = False
-
-	@always(io_addr)
-	def proc_legacy_4842():	
-		# ternary:		  
-		if io_addr	==	0b1001100:		  
-			tl2_sel.next = True
-		else:
-			tl2_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_legacy_4848():	
-		# ternary:		  
-		if (io_addr_r == 0b1001100)  &	(io_wr == True):		
-			tl2_wr.next = True
-		else:
-			tl2_wr.next = False
-
-	@always(io_addr)
-	def proc_legacy_4854():	
-		# ternary:		  
-		if io_addr	==	0b1001101:		  
-			th2_sel.next = True
-		else:
-			th2_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_legacy_4860():	
-		# ternary:		  
-		if (io_addr_r == 0b1001101)  &	(io_wr == True):		
-			th2_wr.next = True
-		else:
-			th2_wr.next = False
-
-	@always(io_addr)
-	def proc_legacy_4866():	
-		# ternary:		  
-		if io_addr	==	0b0011000:		  
-			scon_sel.next = True
-		else:
-			scon_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_legacy_4872():	
-		# ternary:		  
-		if (io_addr_r == 0b0011000)  &	(io_wr == True):		
-			scon_wr.next = True
-		else:
-			scon_wr.next = False
-
-	@always(io_addr)
-	def proc_legacy_4878():	
-		# ternary:		  
-		if io_addr	==	0b0011001:		  
-			sbuf_sel.next = True
-		else:
-			sbuf_sel.next = False
-
-	@always(io_addr_r, io_wr)
-	def proc_legacy_4884():	
-		# ternary:		  
-		if (io_addr_r == 0b0011001)  &	(io_wr == True):		
-			sbuf_wr.next = True
-		else:
-			sbuf_wr.next = False
 
 
 	###### Wirings: ######

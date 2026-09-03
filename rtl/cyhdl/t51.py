@@ -4,11 +4,11 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 """
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
-import cyhdl_work as work
+from . import cyhdl_work as work
 
 # Imports for 't51':
 
-from cyhdl_work.types import *
+from .cyhdl_work.types import *
 
 SLV8 = Signal.Type(vh.std_logic_vector, 8)
 
@@ -29,11 +29,30 @@ def irq_select(ctx, a, b):
 
 	yield [ walk ]
 
-class T51_Factory(cyrite_factory.Module):
-	from t51_pack import t51_alu as t51_alu_vhdl_bb
 
-	from t51_alu import t51_alu as t51_alu_cyhdl_impl
-	from t51_glue import t51_glue as t51_glue_cyhdl_impl
+@container
+class Monitor:
+	"Monitor interface for simulation purposes"
+	_inputs = [ ]
+	_outputs = [ 'sfraddr', 're', 'we', 'data', 'pc' ]
+	_other = []
+
+	def __init__(self, _S):
+		self.sfraddr = _S(intbv()[8:])
+		self.re = _S(bool())
+		self.we = _S(bool())
+		self.data = _S(intbv()[8:])
+		self.pc = _S(intbv()[16:])
+
+
+class T51_Factory(cyrite_factory.Module):
+
+	_Monitor = Monitor
+
+	from .t51_pack import t51_alu as t51_alu_vhdl_bb
+
+	from .t51_alu import t51_alu as t51_alu_cyhdl_impl
+	from .t51_glue import t51_glue as t51_glue_cyhdl_impl
 
 	def __init__(self, name, target, VARIANT = 0):
 		# Here we switch between blackbox and cyhdl-version of the module
@@ -91,6 +110,8 @@ class T51_Factory(cyrite_factory.Module):
 		iram_wr						: Bool.Output,
 		iram_addr					: Byte.Output,
 		iram_wdata					: Byte.Output,
+
+		mon : (type(None), Monitor),
 		
 		DUALBUS						: bool = True,
 		RAMADDRESSWIDTH				: int = 8,

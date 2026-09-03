@@ -1,7 +1,7 @@
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 
-from cyhdl_work.types import *
+from .types import *
 
 from myirl.library.memory import MemArray
 

@@ -6,16 +6,15 @@ Modifications applied
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 from myirl.library.array import ReadOnlyIndexer
-import cyhdl_work as work
+from . import cyhdl_work as work
 
-from cyhdl_work.types import *
+from .cyhdl_work.types import *
 
 # Finally, the core:
-from t51 import T51_Factory
+from .t51 import T51_Factory, Monitor
 
 # Must take exactly the same type:
 _SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
-IOPort = Signal.Type(vh.std_logic_vector, 8)
 
 
 _INTBV = lambda x : vh.Cast(work._intbv, x)
@@ -37,16 +36,18 @@ def pmux_generator(ctx, sigarray, selectors, data):
 
 
 class T51(T51_Factory):
-	from t51_port import t51_port
-	from t51_glue import t51_glue
-	from t51_tc01 import t51_tc01
-	from t51_tc2 import t51_tc2
-	from t51_uart import t51_uart
+	from .t51_port import t51_port
+	from .t51_glue import t51_glue
+	from .t51_tc01 import t51_tc01
+	from .t51_tc2 import t51_tc2
+	from .t51_uart import t51_uart
 
+	_VHDLFILES = []
+	_MODULES = []
 
 	
 	@cyrite_factory.block_component
-	def t8052(self,
+	def t8052x(self,
 		# signals:
 		clk							: ClkSignal,
 		rst_n						: ResetSignal,
@@ -75,7 +76,7 @@ class T51(T51_Factory):
 		xram_dat_o					: Byte.Output,
 		xram_adr_o					: Addr16.Output,
 		xram_dat_i					: Byte,
-		
+		mon                         : (type(None), Monitor) = None,
 		TRISTATE					: int = 0,
 		ROMADDRESSWIDTH				: int = 16,
 		IRAMADDRESSWIDTH			: int = 8,
@@ -106,7 +107,7 @@ class T51(T51_Factory):
 		ram_rd = Bool()
 		ram_wr = Bool()
 		ram_we_n = Bool()
-		zeros = Signal(intbv()[15+1:XRAMADDRESSWIDTH])
+		# zeros = Signal(intbv()[15+1:XRAMADDRESSWIDTH])
 		ram_access = Bool()
 		mux_sel = Bool()
 		mux_sel_r = Bool()
@@ -206,7 +207,7 @@ class T51(T51_Factory):
 			xram_stb_o					 @assign@ ( (ext_ram_en & ram_access) ),
 			xram_we_o					 @assign@ ( ram_wr ),
 			xram_addr					 @assign@ ( ram_addr_r ),
-			zeros						 @assign@ ( 0 ),
+			# zeros						 @assign@ ( 0 ),
 			mux_sel						 @assign@ ( ext_ram_en ),
 			int_xram_sel_n				 @assign@ ( ext_ram_en ),
 			ram_we_n					 @assign@ ( ~ram_wr ),
@@ -241,7 +242,7 @@ class T51(T51_Factory):
 			clk = clk,
 			a = rom_addr,
 			d = rom_data,
-			INITDATA = ROM_DATA
+			INITDATA = ROM_DATA, USE_HEX = self.USE_HEXFILE
 		)
 
 		ram = work.ssram(
@@ -281,6 +282,7 @@ class T51(T51_Factory):
 			iram_wr = iram_wr,
 			iram_addr = iram_addr,
 			iram_wdata = iram_wdata,
+			mon = mon,
 
 			DUALBUS = True,
 			RAMADDRESSWIDTH = IRAMADDRESSWIDTH,
@@ -409,32 +411,33 @@ class T51(T51_Factory):
 		)
 		
 		 # instance 't51_tc01'
-		tc01 = self.t51_tc01(
-			FASTCOUNT = 0, TRISTATE = TRISTATE,
+		if 0:
+			tc01 = self.t51_tc01(
+				FASTCOUNT = 0, TRISTATE = TRISTATE,
 
-			clk = clk,
-			rst_n = rst_n,
-			t0 = t0,
-			t1 = t1,
-			int0 = int0,
-			int1 = int1,
-			m_sel = tmod_sel,
-			h0_sel = th0_sel,
-			l0_sel = tl0_sel,
-			h1_sel = th1_sel,
-			l1_sel = tl1_sel,
-			r0 = r0,
-			r1 = r1,
-			m_wr = tmod_wr,
-			h0_wr = th0_wr,
-			l0_wr = tl0_wr,
-			h1_wr = th1_wr,
-			l1_wr = tl1_wr,
-			data_in = _SLV(io_wdata),
-			data_out = io_rdata_arr[5],
-			of0 = of0,
-			of1 = of1
-		)
+				clk = clk,
+				rst_n = rst_n,
+				t0 = t0,
+				t1 = t1,
+				int0 = int0,
+				int1 = int1,
+				m_sel = tmod_sel,
+				h0_sel = th0_sel,
+				l0_sel = tl0_sel,
+				h1_sel = th1_sel,
+				l1_sel = tl1_sel,
+				r0 = r0,
+				r1 = r1,
+				m_wr = tmod_wr,
+				h0_wr = th0_wr,
+				l0_wr = tl0_wr,
+				h1_wr = th1_wr,
+				l1_wr = tl1_wr,
+				data_in = _SLV(io_wdata),
+				data_out = io_rdata_arr[5],
+				of0 = of0,
+				of1 = of1
+			)
 		
 		 # instance 't51_tc2'
 		tc2 = self.t51_tc2(
@@ -499,7 +502,7 @@ class T51(T51_Factory):
 
 class T51_VHDL(T51):
 	# Imports for 't8052':
-	import t51_pack as _p
+	from . import t51_pack as _p
 	
 	_VHDLFILES = []
 

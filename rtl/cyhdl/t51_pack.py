@@ -5,7 +5,7 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 
-from cyhdl_work.types import *
+from .cyhdl_work.types import *
 
 
 import os

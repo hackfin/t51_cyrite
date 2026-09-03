@@ -51,7 +51,7 @@ from myirl.kernel.sensitivity import Generator, genprocess_ctx
 from myirl.kernel.sig import ConstSig
 
 
-UNDEFINED8 = DontCare(8, "U")
+UNDEFINED8 = DontCare(8, "-")
 
 class Decoder(Generator):
 	"""Decoder generator"""

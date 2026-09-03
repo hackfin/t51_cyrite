@@ -4,7 +4,7 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 """
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
-import cyhdl_work as work
+from . import cyhdl_work as work
 
 _SLV = lambda x : vh.Cast(vh._SLV, x)
 _INTBV = lambda x : vh.Cast(work._intbv, x)
@@ -79,7 +79,7 @@ def t51_tc2(
 			elif c_sel:
 				data_out.next = tcon
 			else:
-				data_out.next = work.DONTCARE
+				data_out.next = work.DontCare(8, "-")
 	
 
 	@always_seq(clk.posedge, rst_n)

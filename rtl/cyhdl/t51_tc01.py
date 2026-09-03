@@ -4,7 +4,7 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 """
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
-import cyhdl_work as work
+from . import cyhdl_work as work
 
 # Imports for 't51_tc01':
 
@@ -82,7 +82,7 @@ def t51_tc01(
 			elif m_sel:
 				data_out.next = tmod
 			else:
-				data_out.next = work.DONTCARE
+				data_out.next = work.DontCare(8, "-")
 				
 
 	@always(rst_n, clk)

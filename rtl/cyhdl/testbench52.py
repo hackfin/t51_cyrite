@@ -5,7 +5,8 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 
-from t8052 import T51, T51_VHDL
+from cpu8051.t8052 import T51, T51_VHDL
+from cpu8051.cyhdl_work.types import *
 
 # Register signal auxiliaries
 from library.soc import Reg, BF, RegisterSignal
@@ -76,6 +77,7 @@ class Lookup:
 
 class Rego600_Device:
 	"The pin mapping of the I/O ports of the Rego600 hardware"
+	# This is just a Port mockup. Use the one from the rego600 clone project
 	from sfr8051_8c552 import rmap_sfr
 
 	BIDIR, IN, OUT = range(3)
@@ -194,14 +196,14 @@ class TestSetup:
 		 # instance 't8052'
 		 #
 
-		p0 = Signal(vh.std_logic_vector()[8:])
-		p1 = Signal(vh.std_logic_vector()[8:])
-		p2 = Signal(vh.std_logic_vector()[8:])
-		p3 = Signal(vh.std_logic_vector()[8:])
-		p0_out = Signal(vh.std_logic_vector()[8:])
-		p1_out = Signal(vh.std_logic_vector()[8:])
-		p2_out = Signal(vh.std_logic_vector()[8:])
-		p3_out = Signal(vh.std_logic_vector()[8:])
+		p0 = IOPort()
+		p1 = IOPort()
+		p2 = IOPort()
+		p3 = IOPort()
+		p0_out = IOPort()
+		p1_out = IOPort()
+		p2_out = IOPort()
+		p3_out = IOPort()
 		xram_we_s = Signal(bool())
 		xram_stb_s = Signal(bool())
 		xram_cyc_s = Signal(bool())
@@ -257,7 +259,7 @@ class TestSetup:
 			pc_o[1].collect(sr_4021_dat, sr_4094_dat, rtc_dat, sr_4094_clk)
 		]
 
-		u0 = self.t8052(
+		u0 = self.t8052x(
 			clk = clk,
 			rst_n = rst_n,
 			p0_in = p0,
@@ -360,11 +362,18 @@ class Test8052_VHDLOnly(T51BB, TestSetup, Rego600_Device):
 	"The test bench for the 8051, Blackbox VHDL wrapped"
 
 	XRAM_wire = vh.std_logic_vector
+	USE_HEXFILE = False
 		
 class Test8052(T51_VHDL, TestSetup, Rego600_Device):
 	"The test bench for the 8051"
 
 	XRAM_wire = intbv
+	USE_HEXFILE = False
+
+class Test8052_portable(T51, TestSetup, Rego600_Device):
+	"The test bench for the 8051, cyhdl port setup"
+	XRAM_wire = intbv
+	USE_HEXFILE = True
 
 from cyrite.simulation import ghdl
 from yosys.simulator import CXXRTL, CXXRTLVerilog
@@ -398,7 +407,7 @@ def create_romfile(rom_binary):
 	inst.elab(targets.VHDL, outpath = "/tmp/")
 
 def run_cxxrtl(cycles, variant, wavefile):
-	m = Test8052("t51", CXXRTLVerilog)
+	m = Test8052_portable("t51", CXXRTLVerilog)
 	tb = m.testbench52()
 	tb.run(cycles, debug = True, wavetrace = wavefile, recompile = False)
 
@@ -414,7 +423,8 @@ if __name__ == "__main__":
 
 	create_romfile("/tmp/patched.bin")
 	# run_ghdl(cycles, 0, "/tmp/t51_vhdl.vcd")
-	run_ghdl(cycles, 1, "/tmp/t51.vcd")
-	# run_cxxrtl(cycles, None, "/tmp/t51-uut.vcd")
-	#
+	# run_ghdl(cycles, 1, "/tmp/t51.vcd")
+	run_cxxrtl(cycles * 20, None, "/tmp/t51-uut.vcd")
+	# Check the two waveforms:
+	# twinwave /tmp/t51_vhdl.vcd vhdl.sav + /tmp/t51.vcd t51.sav
 
