@@ -26,7 +26,6 @@ class RegisterSignal(PASignal):
 			lsb += n
 			msb += 1
 
-
 		r = Reg(msb, bf)
 		super().__init__(intbv()[msb:], name = name)
 		self._reg = r
@@ -35,9 +34,24 @@ class RegisterSignal(PASignal):
 		bf = self._reg.bfmap[name]
 		return self[bf.as_slice()]
 
-	
 	def assign(self, **d):
 		return self._reg.assign(self, **d)
+
+	def collect(self, data, w0c = "", exclude = ""):
+		d = {}
+		for k, i in self._reg.bfmap.items():
+			e = data[i.as_slice()] # Get slice out of data
+			if k in w0c:
+				e = getattr(self, k) & e
+			elif k in exclude:
+				# Assign the original value
+				e = getattr(self, k)	
+			else:
+				pass
+
+			d[k] = e
+		return self.set(self._reg.compose(**d))
+
 
 from myirl.kernel.extensions import UserProxyType
 
@@ -74,6 +88,7 @@ class Decoder(Generator):
 
 		d = self.func()
 
+
 		c = 0
 		for k, i in d.items():
 			a = getattr(self.ns, k)
@@ -82,16 +97,20 @@ class Decoder(Generator):
 			).Else(
 				i[0].set(False)
 			)
-			logic1 = context.If(self.addr_r == ConstSig(a, n)).Then (
-				i[1].set(self.wr)
-			).Else(
-				i[1].set(False)
-			)
+			logic = [ logic0 ]
 
+			if not i[1] is None:
+				logic1 = context.If(self.addr_r == ConstSig(a, n)).Then (
+					i[1].set(self.wr)
+				).Else(
+					i[1].set(False)
+				)
+
+				logic.append(logic1)
 
 			@genprocess_ctx(self.addr, self.addr_r, self.wr)
 			def lut_proc(context):
-				 yield [ logic0, logic1 ]
+				 yield logic
 			
 			lut_proc.rename("proc_%s" % k)
 			c += 1

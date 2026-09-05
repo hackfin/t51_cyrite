@@ -41,6 +41,7 @@ def t51_glue(
 	p1_sel						: Signal.Type(vh.std_logic).Output,
 	p2_sel						: Signal.Type(vh.std_logic).Output,
 	p3_sel						: Signal.Type(vh.std_logic).Output,
+	p4_sel						: Signal.Type(vh.std_logic).Output,
 	tmod_sel					: Signal.Type(vh.std_logic).Output,
 	tl0_sel						: Signal.Type(vh.std_logic).Output,
 	tl1_sel						: Signal.Type(vh.std_logic).Output,
@@ -53,10 +54,13 @@ def t51_glue(
 	th2_sel						: Signal.Type(vh.std_logic).Output,
 	scon_sel					: Signal.Type(vh.std_logic).Output,
 	sbuf_sel					: Signal.Type(vh.std_logic).Output,
+	adc_sel 					: Signal.Type(intbv()[2:]).Output,
+	adcon_wr                    : Bool.Output,
 	p0_wr						: Signal.Type(vh.std_logic).Output,
 	p1_wr						: Signal.Type(vh.std_logic).Output,
 	p2_wr						: Signal.Type(vh.std_logic).Output,
 	p3_wr						: Signal.Type(vh.std_logic).Output,
+	p4_wr						: Signal.Type(vh.std_logic).Output,
 	tmod_wr						: Signal.Type(vh.std_logic).Output,
 	tl0_wr						: Signal.Type(vh.std_logic).Output,
 	tl1_wr						: Signal.Type(vh.std_logic).Output,
@@ -203,6 +207,11 @@ def t51_glue(
 		else:
 			int_rq[5].next = False
 
+	adcon_sel, adch_sel = [ Bool() for _ in range(2) ]
+
+	adc_select = [
+		adc_sel.wireup(concat(adcon_sel, adch_sel)),
+	]
 
 	@work.decoder_generator(R, io_addr, io_addr_r, io_wr)
 	def decode():
@@ -215,6 +224,7 @@ cyhdl_work/__init__.py"""
 			'P1' : (p1_sel, p1_wr,),
 			'P2' : (p2_sel, p2_wr,),
 			'P3' : (p3_sel, p3_wr,),
+			'P4' : (p4_sel, p4_wr,),
 			# 'P4' : (p4_sel, p4_wr,),
 			'TH0' : (th0_sel, th0_wr,),
 			'TH1' : (th1_sel, th1_wr,),
@@ -226,6 +236,9 @@ cyhdl_work/__init__.py"""
 			# 'T2CON' : (t2con_sel, t2con_wr,),
 			'S0CON' : (scon_sel, scon_wr,),
 			'S0BUF' : (sbuf_sel, sbuf_wr,),
+			# ADC mockup
+			'ADCON' : (adcon_sel, adcon_wr,),
+			'ADCH' : (adch_sel, None,),
 			# 'RCAP2L' : (rcap2l_sel, rcap2l_wr,),
 			# 'RCAP2H' : (rcap2h_sel, rcap2h_wr,),
 		}

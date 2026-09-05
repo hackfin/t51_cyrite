@@ -36,11 +36,13 @@ def pmux_generator(ctx, sigarray, selectors, data):
 
 
 class T51(T51_Factory):
+	from .t51_adc import t51_adc
 	from .t51_port import t51_port
 	from .t51_glue import t51_glue
 	from .t51_tc01 import t51_tc01
 	from .t51_tc2 import t51_tc2
 	from .t51_uart import t51_uart
+	from .cyhdl_work.rom52 import rom52
 
 	_VHDLFILES = []
 	_MODULES = []
@@ -55,10 +57,12 @@ class T51(T51_Factory):
 		p1_in						: IOPort,
 		p2_in						: IOPort,
 		p3_in						: IOPort,
+		p4_in						: IOPort,
 		p0_out						: IOPort.Output,
 		p1_out						: IOPort.Output,
 		p2_out						: IOPort.Output,
 		p3_out						: IOPort.Output,
+		p4_out						: IOPort.Output,
 		int0						: Bool,
 		int1						: Bool,
 		t0							: Bool,
@@ -69,6 +73,7 @@ class T51(T51_Factory):
 		rxd_iso						: Bool.Output,
 		rxd_o						: Bool.Output,
 		txd							: Bool.Output,
+		ext_ram_en				    : Bool,
 		xram_we_o					: Bool.Output,
 		xram_stb_o					: Bool.Output,
 		xram_cyc_o					: Bool.Output,
@@ -76,6 +81,9 @@ class T51(T51_Factory):
 		xram_dat_o					: Byte.Output,
 		xram_adr_o					: Addr16.Output,
 		xram_dat_i					: Byte,
+		analog_data : Signal.Type(intbv()[10:]),
+		analog_sel  : Signal.Type(intbv()[3:]).Output,
+
 		mon                         : (type(None), Monitor) = None,
 		TRISTATE					: int = 0,
 		ROMADDRESSWIDTH				: int = 16,
@@ -111,7 +119,11 @@ class T51(T51_Factory):
 		ram_access = Bool()
 		mux_sel = Bool()
 		mux_sel_r = Bool()
-		ext_ram_en = Bool()
+
+		# self._memory_select = Bool() # This is by default 0
+		# A target using external memory peripherals must
+		# initialize and control this signal, accordingly
+
 		int_xram_sel_n = Bool()
 		io_rd = Bool()
 		io_wr = Bool()
@@ -125,6 +137,7 @@ class T51(T51_Factory):
 		p1_sel = Bool()
 		p2_sel = Bool()
 		p3_sel = Bool()
+		p4_sel = Bool()
 		tmod_sel = Bool()
 		tl0_sel = Bool()
 		tl1_sel = Bool()
@@ -137,10 +150,14 @@ class T51(T51_Factory):
 		th2_sel = Bool()
 		scon_sel = Bool()
 		sbuf_sel = Bool()
+		adc_sel = Signal(intbv()[2:])
+		adcon_wr = Bool()
+
 		p0_wr = Bool()
 		p1_wr = Bool()
 		p2_wr = Bool()
 		p3_wr = Bool()
+		p4_wr = Bool()
 		tmod_wr = Bool()
 		tl0_wr = Bool()
 		tl1_wr = Bool()
@@ -176,7 +193,7 @@ class T51(T51_Factory):
 				ready.next = True
 
 		@always_seq(clk.posedge, rst_n)
-		def proc_1590():	
+		def mux_sel_delay():	
 			io_addr_r.next = io_addr
 			if ready  ==  True:			   
 				ram_addr_r.next = ram_addr
@@ -199,6 +216,10 @@ class T51(T51_Factory):
 				ram_rdata.next = xram_dat_i
 
 
+		# We ommitted the RAM selection according to the address here.
+		# We might have a larger address space on some systems and use
+		# GPIOs as CS pins.
+
 		###### Wirings: ######
 		_wires_ = [
 			xram_adr_o					 @assign@ ( xram_addr[15+1:0] ),
@@ -215,10 +236,13 @@ class T51(T51_Factory):
 			io_rdata_en[2]				 @assign@ ( p1_sel ),
 			io_rdata_en[3]				 @assign@ ( p2_sel ),
 			io_rdata_en[4]				 @assign@ ( p3_sel ),
-			io_rdata_en[5]				 @assign@ ( ((((tmod_sel | th0_sel) | tl0_sel) | th1_sel) | tl1_sel) ),
-			io_rdata_en[6]				 @assign@ ( ((((t2con_sel | rcap2h_sel) | rcap2l_sel) | th2_sel) | tl2_sel) ),
+			io_rdata_en[5]				 @assign@ ( p4_sel ),
+			io_rdata_en[6]				 @assign@ ( adc_sel[0] | adc_sel[1] ),
+			# io_rdata_en[5]				 @assign@ ( ((((tmod_sel | th0_sel) | tl0_sel) | th1_sel) | tl1_sel) ),
+			# io_rdata_en[6]				 @assign@ ( ((((t2con_sel | rcap2h_sel) | rcap2l_sel) | th2_sel) | tl2_sel) ),
 			io_rdata_en[7]				 @assign@ ( (scon_sel | sbuf_sel) ),
 		]
+
 
 ############################################################################
 # Muxer
@@ -232,13 +256,13 @@ class T51(T51_Factory):
 ############################################################################
 # ROM INSTANCING
 
-		with open("/tmp/patched.bin", "rb") as f:
+		with open(self.FIRMWARE, "rb") as f:
 			ROM_DATA = f.read()
 			f.close()
 
 		
 		 # instance 'rom52'
-		rom = work.rom52(
+		rom = self.rom52(
 			clk = clk,
 			a = rom_addr,
 			d = rom_data,
@@ -319,6 +343,7 @@ class T51(T51_Factory):
 			p1_sel = p1_sel,
 			p2_sel = p2_sel,
 			p3_sel = p3_sel,
+			p4_sel = p4_sel,
 			tmod_sel = tmod_sel,
 			tl0_sel = tl0_sel,
 			tl1_sel = tl1_sel,
@@ -331,10 +356,13 @@ class T51(T51_Factory):
 			th2_sel = th2_sel,
 			scon_sel = scon_sel,
 			sbuf_sel = sbuf_sel,
+			adc_sel = adc_sel,
+			adcon_wr = adcon_wr,
 			p0_wr = p0_wr,
 			p1_wr = p1_wr,
 			p2_wr = p2_wr,
 			p3_wr = p3_wr,
+			p4_wr = p4_wr,
 			tmod_wr = tmod_wr,
 			tl0_wr = tl0_wr,
 			tl1_wr = tl1_wr,
@@ -409,7 +437,32 @@ class T51(T51_Factory):
 			ioport_in = p3_in,
 			ioport_out = p3_out
 		)
-		
+			 
+		tp4 = self.t51_port(
+			clk = clk,
+			rst_n = rst_n,
+			sel = p4_sel,
+			rd_rmw = io_rd,
+			wr = p4_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[5],
+			ioport_in = p4_in,
+			ioport_out = p4_out
+		)
+
+
+		adc = self.t51_adc(
+			clk = clk,
+			rst_n = rst_n,
+			sel = adc_sel,
+			rd_rmw = io_rd,
+			wr = adcon_wr,
+			data_in = _SLV(io_wdata),
+			data_out = io_rdata_arr[6],
+			analog_in = analog_data,
+			analog_sel = analog_sel
+		)
+	
 		 # instance 't51_tc01'
 		if 0:
 			tc01 = self.t51_tc01(
@@ -438,32 +491,34 @@ class T51(T51_Factory):
 				of0 = of0,
 				of1 = of1
 			)
-		
-		 # instance 't51_tc2'
-		tc2 = self.t51_tc2(
-			FASTCOUNT = 0, TRISTATE = TRISTATE,
 
-			clk = clk,
-			rst_n = rst_n,
-			t2 = t2,
-			t2ex = t2ex,
-			c_sel = t2con_sel,
-			ch_sel = rcap2h_sel,
-			cl_sel = rcap2l_sel,
-			h_sel = th2_sel,
-			l_sel = tl2_sel,
-			c_wr = t2con_wr,
-			ch_wr = rcap2h_wr,
-			cl_wr = rcap2l_wr,
-			h_wr = th2_wr,
-			l_wr = tl2_wr,
-			data_in = _SLV(io_wdata),
-			data_out = io_rdata_arr[6],
-			user2 = user2,
-			uset2 = uset2,
-			uart_clk = uart_clk,
-			f = of2
-		)
+		if False:
+		
+			 # instance 't51_tc2'
+			tc2 = self.t51_tc2(
+				FASTCOUNT = 0, TRISTATE = TRISTATE,
+
+				clk = clk,
+				rst_n = rst_n,
+				t2 = t2,
+				t2ex = t2ex,
+				c_sel = t2con_sel,
+				ch_sel = rcap2h_sel,
+				cl_sel = rcap2l_sel,
+				h_sel = th2_sel,
+				l_sel = tl2_sel,
+				c_wr = t2con_wr,
+				ch_wr = rcap2h_wr,
+				cl_wr = rcap2l_wr,
+				h_wr = th2_wr,
+				l_wr = tl2_wr,
+				data_in = _SLV(io_wdata),
+				data_out = io_rdata_arr[6],
+				user2 = user2,
+				uset2 = uset2,
+				uart_clk = uart_clk,
+				f = of2
+			)
 
 		if 0:
 		
@@ -496,8 +551,13 @@ class T51(T51_Factory):
 			uart_static_wiring = [
 				io_rdata_arr[7].wireup(0xaa)
 			]
-
+		
+		
 		return locals()
+
+	def custom_mem_select(self, mux):
+		"Platform specific muxer selection. If False, read from internal SRAM"
+		return [ mux.wireup(self._memory_select) ]
 
 
 class T51_VHDL(T51):

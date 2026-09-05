@@ -259,7 +259,8 @@ class TestSetup:
 			pc_o[1].collect(sr_4021_dat, sr_4094_dat, rtc_dat, sr_4094_clk)
 		]
 
-		u0 = self.t8052x(
+		# Note: we moved to 't8052x'. Fix the interface.
+		u0 = self.t8052(
 			clk = clk,
 			rst_n = rst_n,
 			p0_in = p0,
@@ -403,8 +404,8 @@ def create_romfile(rom_binary):
 
 	from cyhdl_work.rom52 import rom52
 
-	inst = rom52(clk, addr, data, INITDATA = ROM_DATA)
-	inst.elab(targets.VHDL, outpath = "/tmp/")
+	inst = rom52(clk, addr, data, INITDATA = ROM_DATA, USE_HEX = True)
+	inst.elab(targets.Verilog, outpath = "/tmp/romtest/")
 
 def run_cxxrtl(cycles, variant, wavefile):
 	m = Test8052_portable("t51", CXXRTLVerilog)

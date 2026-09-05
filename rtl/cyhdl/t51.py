@@ -232,6 +232,11 @@ class T51_Factory(cyrite_factory.Module):
 			ram_addr.wireup (concat(*reversed(ram_addr_p)))
 		]
 
+		if mon:
+			monitor_tap = [
+				mon.pc  .wireup (pc)
+			]
+
 		@always(icall, fcycle, mcode, iready)
 		def proc_11472():	 
 			# ternary:		  
@@ -434,7 +439,7 @@ class T51_Factory(cyrite_factory.Module):
 			else:
 				ri_stall.next = False
 
-		@always(int_addra, next_mem_wr, rom_data, rom_data, last, mcode)
+		@always(int_addra, next_mem_wr, rom_data, last, mcode)
 		def select_psw_stall():	 
 			# ternary:		  
 			if ((((int_addra == 0b11010000) & (next_mem_wr == False)) & ((rom_data[3+1:1] == 0b011) | (rom_data[3] == True))) & (last == True))  &	(mcode[3] == True):		   
@@ -450,7 +455,7 @@ class T51_Factory(cyrite_factory.Module):
 			else:
 				acc_stall.next = False
 
-		@always(last, mcode, int_addra, inst, rom_data, rom_data, istart)
+		@always(last, mcode, int_addra, inst, rom_data, istart)
 		def select_spstall():	 
 			# ternary:		  
 			if (((((last == True) & (mcode[3] == True)) & (int_addra == 0b10000001)) & ((inst[7+1:4] == 0b1000) | (inst[3+1:1] != 0b011))) & (inst != 0b11000000))	&  (((rom_data == 0b00010010) | (rom_data[4+1:0] == 0b10001)) | (istart == True)):		  
@@ -458,7 +463,7 @@ class T51_Factory(cyrite_factory.Module):
 			else:
 				sp_stall.next = False
 
-		@always(last, inst, rom_data, rom_data, rom_data)
+		@always(last, inst, rom_data)
 		def select_movx():	 
 			# ternary:		  
 			if ((((((last == True) & (inst[7+1:5] == 0b111)) & (inst[3+1:2] == 0b00)) & (inst[1+1:0] != 0b01)) & (rom_data[7+1:5] == 0b111)) & (rom_data[3+1:2] == 0b00))  &  (rom_data[1+1:0] != 0b01):		
@@ -868,7 +873,7 @@ class T51_Factory(cyrite_factory.Module):
 					if fcycle  ==  0b01:					
 						opc.next = pc
 
-		@always(acc, bit_pattern, cjne, djnz, dph, dpl, div_rdy, fcycle, icall, inst, inst1, inst2, int_trig_r, mem_a, mem_b, next_acc_z, next_psw7, opc, op_a, pc, pcpaused, ret_r, rom_data, iready, rst_r_n, stall_pipe, ram_rd_i, ram_wr_i, ramc)
+		@always_comb
 		def next_pc_select():	
 			# async mux statements:		   
 			npc.next = pc
