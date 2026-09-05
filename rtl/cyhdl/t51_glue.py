@@ -15,6 +15,54 @@ from .t51_pack import *
 
 from . import t51_defines as R
 
+
+@container(CONTAINER_BULK)
+class SFRSelect:
+	def __init__(self):
+		self.p0						= Signal(bool())
+		self.p1						= Signal(bool())
+		self.p2						= Signal(bool())
+		self.p3						= Signal(bool())
+		self.p4						= Signal(bool())
+		self.tmod					= Signal(bool())
+		self.tl0					= Signal(bool())
+		self.tl1					= Signal(bool())
+		self.th0					= Signal(bool())
+		self.th1					= Signal(bool())
+		self.t2con					= Signal(bool())
+		self.rcap2l					= Signal(bool())
+		self.rcap2h					= Signal(bool())
+		self.tl2					= Signal(bool())
+		self.th2					= Signal(bool())
+		self.scon					= Signal(bool())
+		self.sbuf					= Signal(bool())
+		self.adcon		= Bool()
+		self.adch		= Bool()
+
+@container(CONTAINER_BULK)
+class SFRWrite:
+	def __init__(self):
+		self.p0						= Signal(bool())
+		self.p1						= Signal(bool())
+		self.p2						= Signal(bool())
+		self.p3						= Signal(bool())
+		self.p4						= Signal(bool())
+		self.tmod					= Signal(bool())
+		self.tl0					= Signal(bool())
+		self.tl1					= Signal(bool())
+		self.th0					= Signal(bool())
+		self.th1					= Signal(bool())
+		self.t2con					= Signal(bool())
+		self.rcap2l					= Signal(bool())
+		self.rcap2h					= Signal(bool())
+		self.tl2					= Signal(bool())
+		self.th2					= Signal(bool())
+		self.scon					= Signal(bool())
+		self.sbuf					= Signal(bool())
+		self.adcon		= Bool()
+		# READ ONLY
+		# self.adch		= Bool()
+
 @block
 def t51_glue(
 	# signals:
@@ -37,42 +85,8 @@ def t51_glue(
 	r0							: Signal.Type(vh.std_logic).Output,
 	r1							: Signal.Type(vh.std_logic).Output,
 	smod						: Signal.Type(vh.std_logic).Output,
-	p0_sel						: Signal.Type(vh.std_logic).Output,
-	p1_sel						: Signal.Type(vh.std_logic).Output,
-	p2_sel						: Signal.Type(vh.std_logic).Output,
-	p3_sel						: Signal.Type(vh.std_logic).Output,
-	p4_sel						: Signal.Type(vh.std_logic).Output,
-	tmod_sel					: Signal.Type(vh.std_logic).Output,
-	tl0_sel						: Signal.Type(vh.std_logic).Output,
-	tl1_sel						: Signal.Type(vh.std_logic).Output,
-	th0_sel						: Signal.Type(vh.std_logic).Output,
-	th1_sel						: Signal.Type(vh.std_logic).Output,
-	t2con_sel					: Signal.Type(vh.std_logic).Output,
-	rcap2l_sel					: Signal.Type(vh.std_logic).Output,
-	rcap2h_sel					: Signal.Type(vh.std_logic).Output,
-	tl2_sel						: Signal.Type(vh.std_logic).Output,
-	th2_sel						: Signal.Type(vh.std_logic).Output,
-	scon_sel					: Signal.Type(vh.std_logic).Output,
-	sbuf_sel					: Signal.Type(vh.std_logic).Output,
-	adc_sel 					: Signal.Type(intbv()[2:]).Output,
-	adcon_wr                    : Bool.Output,
-	p0_wr						: Signal.Type(vh.std_logic).Output,
-	p1_wr						: Signal.Type(vh.std_logic).Output,
-	p2_wr						: Signal.Type(vh.std_logic).Output,
-	p3_wr						: Signal.Type(vh.std_logic).Output,
-	p4_wr						: Signal.Type(vh.std_logic).Output,
-	tmod_wr						: Signal.Type(vh.std_logic).Output,
-	tl0_wr						: Signal.Type(vh.std_logic).Output,
-	tl1_wr						: Signal.Type(vh.std_logic).Output,
-	th0_wr						: Signal.Type(vh.std_logic).Output,
-	th1_wr						: Signal.Type(vh.std_logic).Output,
-	t2con_wr					: Signal.Type(vh.std_logic).Output,
-	rcap2l_wr					: Signal.Type(vh.std_logic).Output,
-	rcap2h_wr					: Signal.Type(vh.std_logic).Output,
-	tl2_wr						: Signal.Type(vh.std_logic).Output,
-	th2_wr						: Signal.Type(vh.std_logic).Output,
-	scon_wr						: Signal.Type(vh.std_logic).Output,
-	sbuf_wr						: Signal.Type(vh.std_logic).Output,
+	select                      : SFRSelect.Output,
+	write                       : SFRWrite.Output,
 	int_trig					: Signal.Type(vh.std_logic_vector, 6+1 - 0).Output,
 	
 	TRISTATE					: int = 1): 
@@ -88,6 +102,8 @@ def t51_glue(
 	int_rq = [ Bool() for _ in range(int_trig.size()) ]
 
 	reset = rst_n
+
+	sel = select
 
 	ie = Signal(vh.std_logic_vector()[7+1:0])
 	# Here we rather use a custom register signal (PASignal)
@@ -207,12 +223,6 @@ def t51_glue(
 		else:
 			int_rq[5].next = False
 
-	adcon_sel, adch_sel = [ Bool() for _ in range(2) ]
-
-	adc_select = [
-		adc_sel.wireup(concat(adcon_sel, adch_sel)),
-	]
-
 	@work.decoder_generator(R, io_addr, io_addr_r, io_wr)
 	def decode():
 		"""Procedurally generated decoder. When the io_addr/io_addr_r pair
@@ -220,27 +230,27 @@ matches the corresponding register address, mux through to the given pins.
 The pin definitions are taken from a resource specified in
 cyhdl_work/__init__.py"""
 		return {
-			'P0' : (p0_sel, p0_wr,),
-			'P1' : (p1_sel, p1_wr,),
-			'P2' : (p2_sel, p2_wr,),
-			'P3' : (p3_sel, p3_wr,),
-			'P4' : (p4_sel, p4_wr,),
-			# 'P4' : (p4_sel, p4_wr,),
-			'TH0' : (th0_sel, th0_wr,),
-			'TH1' : (th1_sel, th1_wr,),
-			# 'TH2' : (th2_sel, th2_wr,),
-			'TL0' : (tl0_sel, tl0_wr,),
-			'TL1' : (tl1_sel, tl1_wr,),
-			# 'TL2' : (tl2_sel, tl2_wr,),
-			'TMOD' : (tmod_sel, tmod_wr,),
-			# 'T2CON' : (t2con_sel, t2con_wr,),
-			'S0CON' : (scon_sel, scon_wr,),
-			'S0BUF' : (sbuf_sel, sbuf_wr,),
+			'P0' : (sel.p0, write.p0,),
+			'P1' : (sel.p1, write.p1,),
+			'P2' : (sel.p2, write.p2,),
+			'P3' : (sel.p3, write.p3,),
+			'P4' : (sel.p4, write.p4,),
+			# 'P4' : (p4_sel, p4,),
+			'TH0' : (sel.th0, write.th0,),
+			'TH1' : (sel.th1, write.th1,),
+			# 'TH2' : (th2_sel, th2,),
+			'TL0' : (sel.tl0, write.tl0,),
+			'TL1' : (sel.tl1, write.tl1,),
+			# 'TL2' : (tl2_sel, write.tl2,),
+			'TMOD' : (sel.tmod, write.tmod,),
+			# 'T2CON' : (t2con_sel, write.t2con,),
+			'S0CON' : (sel.scon, write.scon,),
+			'S0BUF' : (sel.sbuf, write.sbuf,),
 			# ADC mockup
-			'ADCON' : (adcon_sel, adcon_wr,),
-			'ADCH' : (adch_sel, None,),
-			# 'RCAP2L' : (rcap2l_sel, rcap2l_wr,),
-			# 'RCAP2H' : (rcap2h_sel, rcap2h_wr,),
+			'ADCON' : (sel.adcon, write.adcon,),
+			'ADCH'  : (sel.adch, None,),
+			# 'RCAP2L' : (rcap2l_sel, rcap2l,),
+			# 'RCAP2H' : (rcap2h_sel, rcap2h,),
 		}
 
 

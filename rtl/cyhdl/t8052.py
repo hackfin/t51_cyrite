@@ -19,6 +19,7 @@ _SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
 
 _INTBV = lambda x : vh.Cast(work._intbv, x)
 
+
 @hdlmacro
 def pmux_generator(ctx, sigarray, selectors, data):
 	"Parallel multiplexer with selector signals"
@@ -38,7 +39,7 @@ def pmux_generator(ctx, sigarray, selectors, data):
 class T51(T51_Factory):
 	from .t51_adc import t51_adc
 	from .t51_port import t51_port
-	from .t51_glue import t51_glue
+	from .t51_glue import t51_glue, SFRSelect, SFRWrite
 	from .t51_tc01 import t51_tc01
 	from .t51_tc2 import t51_tc2
 	from .t51_uart import t51_uart
@@ -133,43 +134,10 @@ class T51(T51_Factory):
 		io_rdata = Byte()
 		io_rdata_arr = [ Signal(vh.std_logic_vector()[7+1:0]) for _ in range(EXT_MUX_IN_NUM) ]
 		io_rdata_en = [ Bool() for _ in range(EXT_MUX_IN_NUM) ]
-		p0_sel = Bool()
-		p1_sel = Bool()
-		p2_sel = Bool()
-		p3_sel = Bool()
-		p4_sel = Bool()
-		tmod_sel = Bool()
-		tl0_sel = Bool()
-		tl1_sel = Bool()
-		th0_sel = Bool()
-		th1_sel = Bool()
-		t2con_sel = Bool()
-		rcap2l_sel = Bool()
-		rcap2h_sel = Bool()
-		tl2_sel = Bool()
-		th2_sel = Bool()
-		scon_sel = Bool()
-		sbuf_sel = Bool()
-		adc_sel = Signal(intbv()[2:])
-		adcon_wr = Bool()
+		# Select and write
+		sfrsel = self.SFRSelect()
+		sfrwr = self.SFRWrite()
 
-		p0_wr = Bool()
-		p1_wr = Bool()
-		p2_wr = Bool()
-		p3_wr = Bool()
-		p4_wr = Bool()
-		tmod_wr = Bool()
-		tl0_wr = Bool()
-		tl1_wr = Bool()
-		th0_wr = Bool()
-		th1_wr = Bool()
-		t2con_wr = Bool()
-		rcap2l_wr = Bool()
-		rcap2h_wr = Bool()
-		tl2_wr = Bool()
-		th2_wr = Bool()
-		scon_wr = Bool()
-		sbuf_wr = Bool()
 		user2 = Bool()
 		uset2 = Bool()
 		uart_clk = Bool()
@@ -232,15 +200,15 @@ class T51(T51_Factory):
 			mux_sel						 @assign@ ( ext_ram_en ),
 			int_xram_sel_n				 @assign@ ( ext_ram_en ),
 			ram_we_n					 @assign@ ( ~ram_wr ),
-			io_rdata_en[1]				 @assign@ ( p0_sel ),
-			io_rdata_en[2]				 @assign@ ( p1_sel ),
-			io_rdata_en[3]				 @assign@ ( p2_sel ),
-			io_rdata_en[4]				 @assign@ ( p3_sel ),
-			io_rdata_en[5]				 @assign@ ( p4_sel ),
-			io_rdata_en[6]				 @assign@ ( adc_sel[0] | adc_sel[1] ),
+			io_rdata_en[1]				 @assign@ ( sfrsel.p0 ),
+			io_rdata_en[2]				 @assign@ ( sfrsel.p1 ),
+			io_rdata_en[3]				 @assign@ ( sfrsel.p2 ),
+			io_rdata_en[4]				 @assign@ ( sfrsel.p3 ),
+			io_rdata_en[5]				 @assign@ ( sfrsel.p4 ),
+			io_rdata_en[6]				 @assign@ ( sfrsel.adcon | sfrsel.adch ),
 			# io_rdata_en[5]				 @assign@ ( ((((tmod_sel | th0_sel) | tl0_sel) | th1_sel) | tl1_sel) ),
 			# io_rdata_en[6]				 @assign@ ( ((((t2con_sel | rcap2h_sel) | rcap2l_sel) | th2_sel) | tl2_sel) ),
-			io_rdata_en[7]				 @assign@ ( (scon_sel | sbuf_sel) ),
+			io_rdata_en[7]				 @assign@ ( (sfrsel.scon | sfrsel.sbuf) ),
 		]
 
 
@@ -339,42 +307,8 @@ class T51(T51_Factory):
 			r0 = r0,
 			r1 = r1,
 			smod = smod,
-			p0_sel = p0_sel,
-			p1_sel = p1_sel,
-			p2_sel = p2_sel,
-			p3_sel = p3_sel,
-			p4_sel = p4_sel,
-			tmod_sel = tmod_sel,
-			tl0_sel = tl0_sel,
-			tl1_sel = tl1_sel,
-			th0_sel = th0_sel,
-			th1_sel = th1_sel,
-			t2con_sel = t2con_sel,
-			rcap2l_sel = rcap2l_sel,
-			rcap2h_sel = rcap2h_sel,
-			tl2_sel = tl2_sel,
-			th2_sel = th2_sel,
-			scon_sel = scon_sel,
-			sbuf_sel = sbuf_sel,
-			adc_sel = adc_sel,
-			adcon_wr = adcon_wr,
-			p0_wr = p0_wr,
-			p1_wr = p1_wr,
-			p2_wr = p2_wr,
-			p3_wr = p3_wr,
-			p4_wr = p4_wr,
-			tmod_wr = tmod_wr,
-			tl0_wr = tl0_wr,
-			tl1_wr = tl1_wr,
-			th0_wr = th0_wr,
-			th1_wr = th1_wr,
-			t2con_wr = t2con_wr,
-			rcap2l_wr = rcap2l_wr,
-			rcap2h_wr = rcap2h_wr,
-			tl2_wr = tl2_wr,
-			th2_wr = th2_wr,
-			scon_wr = scon_wr,
-			sbuf_wr = sbuf_wr,
+			select = sfrsel,
+			write = sfrwr,
 			int_trig = int_trig_slv
 		)
 		
@@ -384,9 +318,9 @@ class T51(T51_Factory):
 
 			clk = clk,
 			rst_n = rst_n,
-			sel = p0_sel,
+			sel = sfrsel.p0,
 			rd_rmw = io_rd,
-			wr = p0_wr,
+			wr = sfrwr.p0,
 			data_in = _SLV(io_wdata),
 			data_out = io_rdata_arr[1],
 			ioport_in = p0_in,
@@ -399,9 +333,9 @@ class T51(T51_Factory):
 
 			clk = clk,
 			rst_n = rst_n,
-			sel = p1_sel,
+			sel = sfrsel.p1,
 			rd_rmw = io_rd,
-			wr = p1_wr,
+			wr = sfrwr.p1,
 			data_in = _SLV(io_wdata),
 			data_out = io_rdata_arr[2],
 			ioport_in = p1_in,
@@ -414,9 +348,9 @@ class T51(T51_Factory):
 
 			clk = clk,
 			rst_n = rst_n,
-			sel = p2_sel,
+			sel = sfrsel.p2,
 			rd_rmw = io_rd,
-			wr = p2_wr,
+			wr = sfrwr.p2,
 			data_in = _SLV(io_wdata),
 			data_out = io_rdata_arr[3],
 			ioport_in = p2_in,
@@ -429,9 +363,9 @@ class T51(T51_Factory):
 
 			clk = clk,
 			rst_n = rst_n,
-			sel = p3_sel,
+			sel = sfrsel.p3,
 			rd_rmw = io_rd,
-			wr = p3_wr,
+			wr = sfrwr.p3,
 			data_in = _SLV(io_wdata),
 			data_out = io_rdata_arr[4],
 			ioport_in = p3_in,
@@ -441,22 +375,26 @@ class T51(T51_Factory):
 		tp4 = self.t51_port(
 			clk = clk,
 			rst_n = rst_n,
-			sel = p4_sel,
+			sel = sfrsel.p4,
 			rd_rmw = io_rd,
-			wr = p4_wr,
+			wr = sfrwr.p4,
 			data_in = _SLV(io_wdata),
 			data_out = io_rdata_arr[5],
 			ioport_in = p4_in,
 			ioport_out = p4_out
 		)
 
+		sel_adc = Signal(intbv()[2:])
+		adc_wiring = [
+			sel_adc.wireup( concat(sfrsel.adcon, sfrsel.adch) )
+		]
 
 		adc = self.t51_adc(
 			clk = clk,
 			rst_n = rst_n,
-			sel = adc_sel,
+			sel = sel_adc,
 			rd_rmw = io_rd,
-			wr = adcon_wr,
+			wr = sfrwr.adcon,
 			data_in = _SLV(io_wdata),
 			data_out = io_rdata_arr[6],
 			analog_in = analog_data,
@@ -474,18 +412,18 @@ class T51(T51_Factory):
 				t1 = t1,
 				int0 = int0,
 				int1 = int1,
-				m_sel = tmod_sel,
-				h0_sel = th0_sel,
-				l0_sel = tl0_sel,
-				h1_sel = th1_sel,
-				l1_sel = tl1_sel,
+				m_sel = sfrsel.tmod,
+				h0_sel = sfrsel.th0,
+				l0_sel = sfrsel.tl0,
+				h1_sel = sfrsel.th1,
+				l1_sel = sfrsel.tl1,
 				r0 = r0,
 				r1 = r1,
-				m_wr = tmod_wr,
-				h0_wr = th0_wr,
-				l0_wr = tl0_wr,
-				h1_wr = th1_wr,
-				l1_wr = tl1_wr,
+				m_wr = sfrwr.tmod,
+				h0_wr = sfrwr.th0,
+				l0_wr = sfrwr.tl0,
+				h1_wr = sfrwr.th1,
+				l1_wr = sfrwr.tl1,
 				data_in = _SLV(io_wdata),
 				data_out = io_rdata_arr[5],
 				of0 = of0,
@@ -502,16 +440,16 @@ class T51(T51_Factory):
 				rst_n = rst_n,
 				t2 = t2,
 				t2ex = t2ex,
-				c_sel = t2con_sel,
-				ch_sel = rcap2h_sel,
-				cl_sel = rcap2l_sel,
-				h_sel = th2_sel,
-				l_sel = tl2_sel,
-				c_wr = t2con_wr,
-				ch_wr = rcap2h_wr,
-				cl_wr = rcap2l_wr,
-				h_wr = th2_wr,
-				l_wr = tl2_wr,
+				c_sel = sfrsel.t2con,
+				ch_sel = sfrsel.rcap2h,
+				cl_sel = sfrsel.rcap2l,
+				h_sel = sfrsel.th2,
+				l_sel = sfrsel.tl2,
+				c_wr = sfrwr.t2con,
+				ch_wr = sfrwr.rcap2h,
+				cl_wr = sfrwr.rcap2l,
+				h_wr = sfrwr.th2,
+				l_wr = sfrwr.tl2,
 				data_in = _SLV(io_wdata),
 				data_out = io_rdata_arr[6],
 				user2 = user2,
@@ -532,10 +470,10 @@ class T51(T51_Factory):
 				uset2 = uset2,
 				baudc2 = uart_clk,
 				baudc1 = of1,
-				sc_sel = scon_sel,
-				sb_sel = sbuf_sel,
-				sc_wr = scon_wr,
-				sb_wr = sbuf_wr,
+				sc_sel = sfrsel.scon,
+				sb_sel = sfrsel.sbuf,
+				sc_wr = sfrwr.scon,
+				sb_wr = sfrwr.sbuf,
 				smod = smod,
 				data_in = _SLV(io_wdata),
 				data_out = io_rdata_arr[7],
