@@ -5,6 +5,7 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 from . import cyhdl_work as work
+from myirl.kernel.components import Comment
 
 # Imports for 't51':
 
@@ -16,18 +17,6 @@ _SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
 
 
 from cyrite.simulation import CoSimulator
-
-@hdlmacro
-def irq_select(ctx, a, b):
-	_if = ctx.If
-	for i in range(7):
-		walk = _if(a[i] == True).Then(
-			b.set(1 << i)
-		)
-		_if = walk.Elif
-	walk = walk.Else(b.set(0))
-
-	yield [ walk ]
 
 
 @container
@@ -86,6 +75,36 @@ class T51_Factory(cyrite_factory.Module):
 
 		super().__init__(name, target)
 
+	@hdlmacro
+	def interrupt_select(self, a, b):
+		_if = self.If
+		for i in range(len(a)):
+			walk = _if(a[i] == True).Then(
+				b.set(1 << i)
+			)
+			_if = walk.Elif
+		walk = walk.Else(b.set(0))
+
+		yield [ walk ]
+
+
+	@hdlmacro
+	def interrupt_vector_generate(self, irq, npc):
+		"""Procedural IRQ vector generator. Maps channels linearely.
+This function needs to be overridden if derivatives choose to map IRQs
+differently than the irqio bit order would suggest."""
+		_if = self.If
+
+		for i in range(1, len(irq)):
+			walk = _if(irq[i] == True).Then(
+				npc.set(i << 3)
+			)
+			_if = walk.Elif
+
+		# walk = walk.Else(npc.set(0))
+
+		yield [ Comment("IRQ vector generation"), walk ]
+
 	@cyrite_factory.block_component
 	def t51(self,
 		# signals:
@@ -100,8 +119,9 @@ class T51_Factory(cyrite_factory.Module):
 		ram_cycle					: Bool.Output,
 		ram_rd						: Bool.Output,
 		ram_wr						: Bool.Output,
-		int_trig					: Signal.Type(intbv()[7:]),
-		int_acc						: Signal.Type(intbv()[7:]).Output,
+		int_trig					: Signal, # Arbitrary length
+		int_prio					: (type(None), Signal),
+		int_acc						: Signal.Output, # 'ack' would be nicer
 		sfr_rd_rmw					: Bool.Output,
 		sfr_wr						: Bool.Output,
 		sfr_addr					: Signal.Type(intbv()[7:]).Output,
@@ -131,7 +151,7 @@ class T51_Factory(cyrite_factory.Module):
 
 		acc = Byte()
 		b = Byte()
-		ip = Byte()
+
 		sp = Signal(vh.unsigned()[7+1:0])
 		dpl0 = Byte()
 		dph0 = Byte()
@@ -197,7 +217,7 @@ class T51_Factory(cyrite_factory.Module):
 		mem_wr = Signal(bool())
 		j_skip = Signal(bool())
 		ipending = Signal(bool())
-		int_trig_r = Signal(intbv()[6+1:0])
+		int_trig_r = int_trig.clone()
 		istart = Signal(bool())
 		icall = Signal(bool())
 		hpint = Signal(bool())
@@ -512,56 +532,69 @@ class T51_Factory(cyrite_factory.Module):
 
 	############################################################################
 
-		# FIXME: tristate mux handling
 
-		if TRISTATE == 1:
-			pass
+		if int_prio is None:
+			# If no external interrupt priority given, we
+			# create internal logic:
+			@always_seq(clk.posedge, rst_n)
+			def internal_ip():	
+				if (sfr_wr_i == True)  &  (int_addra_r == 0b10111000):
+					ip.next = res_bus
 		else:
-			@always_comb
-			def select_sfrdata():
-				if int_addra == 0b11010000:
-					sfr_rdata.next = psw
-				elif int_addra == 0b11100000:
-					sfr_rdata.next = acc
-				elif int_addra == 0b11110000:
-					sfr_rdata.next = b
-				elif int_addra == 0b10000001:
-					sfr_rdata.next = sp
-				elif int_addra == 0b10000100:
-					if SECONDDPTR:
-						if inc_dptr == True:
-							if next_dps == True:
-								sfr_rdata.next = dptr_inc[8:]
-						else:
-							sfr_rdata.next = dpl1
+			ip = int_prio
 
-				elif int_addra == 0b10000101:
-					if SECONDDPTR:
-						if inc_dptr == True:
-							if next_dps == True:
-								sfr_rdata.next = dptr_inc[16:8]
-						else:
-							sfr_rdata.next = dph1
 
-				elif int_addra == 0b10000010:
+		@always_comb
+		def select_sfrdata():
+			"The internal SFR handling. Those are always common to 8051"
+			if int_addra == 0b11010000:
+				sfr_rdata.next = psw
+			elif int_addra == 0b11100000:
+				sfr_rdata.next = acc
+			elif int_addra == 0b11110000:
+				sfr_rdata.next = b
+			elif int_addra == 0b10000001:
+				sfr_rdata.next = sp
+			elif int_addra == 0b10000100:
+				if SECONDDPTR:
 					if inc_dptr == True:
-						if next_dps == False:
+						if next_dps == True:
+							sfr_rdata.next = dptr_inc[8:]
+					else:
+						sfr_rdata.next = dpl1
+
+			elif int_addra == 0b10000101:
+				if SECONDDPTR:
+					if inc_dptr == True:
+						if next_dps == True:
 							sfr_rdata.next = dptr_inc[16:8]
 					else:
-						sfr_rdata.next = dpl0
+						sfr_rdata.next = dph1
 
-				elif int_addra == 0b10000011:
-					if inc_dptr == True and next_dps == False:
+			elif int_addra == 0b10000010:
+				if inc_dptr == True:
+					if next_dps == False:
 						sfr_rdata.next = dptr_inc[16:8]
-					else:
-						sfr_rdata.next = dph0
+				else:
+					sfr_rdata.next = dpl0
 
-				elif int_addra == 0b10000110:
-					if SECONDDPTR and inc_dptr:
-						sfr_rdata.next = concat("0000000", dps)
-				
+			elif int_addra == 0b10000011:
+				if inc_dptr == True and next_dps == False:
+					sfr_rdata.next = dptr_inc[16:8]
+				else:
+					sfr_rdata.next = dph0
+
+			elif int_addra == 0b10000110:
+				if SECONDDPTR and inc_dptr:
+					sfr_rdata.next = concat("0000000", dps)
+			
+			else:
+#				We have an external IP implementation
+#				Well, this isn't fully procedural ifdef style, but WTH.
+				if not int_prio is None:
+					sfr_rdata.next = sfr_rdata_in
 				elif int_addra == 0b10111000:
-					sfr_rdata.next = ip
+					sfr_rdata.next = ip[8:] # UGLY, fake conditional code
 				else:
 					sfr_rdata.next = sfr_rdata_in
 
@@ -812,13 +845,13 @@ class T51_Factory(cyrite_factory.Module):
 			dps.wireup(dps_r if SECONDDPTR else False)
 		]
 
+
 		@always_seq(clk.posedge, rst_n)
 		def irq_handle():	
-			if (sfr_wr_i == True)  &  (int_addra_r == 0b10111000):			  
-				ip.next = res_bus
+			"The IRQ handler. Might turn this into something procedural later"
 			if iready  ==  True:			
-				if ((((int_trig & ip[6+1:0]) != 0b0000000) & (hpint == False)) & (ipending == False))  &  (icall == False):				   
-					int_trig_r.next = (int_trig & ip[6+1:0])
+				if ((((int_trig & ip) != 0) & (hpint == False)) & (ipending == False))  &  (icall == False):				   
+					int_trig_r.next = (int_trig & ip)
 					ipending.next = True
 					hpint.next = True
 				elif ((((int_trig != 0b0000000) & (lpint == False)) & (hpint == False)) & (ipending == False))	&  (icall == False):				
@@ -834,22 +867,8 @@ class T51_Factory(cyrite_factory.Module):
 					int_trig_r.next = 0
 				if (ipending == True)  &  (icall == True):				  
 					# Nicer when procedural:
-					irq_select(irq_handle, int_trig_r, int_acc)
+					self.interrupt_select(int_trig_r, int_acc)
 
-#					if int_trig_r[0]  ==  True:					   
-#						int_acc.next = 0b0000001
-#					elif int_trig_r[1]	==	True:					 
-#						int_acc.next = 0b0000010
-#					elif int_trig_r[2]	==	True:					 
-#						int_acc.next = 0b0000100
-#					elif int_trig_r[3]	==	True:					 
-#						int_acc.next = 0b0001000
-#					elif int_trig_r[4]	==	True:					 
-#						int_acc.next = 0b0010000
-#					elif int_trig_r[5]	==	True:					 
-#						int_acc.next = 0b0100000
-#					elif int_trig_r[6]	==	True:					 
-#						int_acc.next = 0b1000000
 				if inst  ==  0b00110010:				
 					if hpint  ==  False:					
 						lpint.next = False
@@ -918,18 +937,7 @@ class T51_Factory(cyrite_factory.Module):
 				if (inst == 0b00000010)  |	(inst == 0b00010010):			 
 					npc.next = concat(inst1, rom_data)
 				if icall  ==  True:			   
-					if int_trig_r[1]  ==  True:				   
-						npc.next = 0b001000
-					elif int_trig_r[2]	==	True:				 
-						npc.next = 0b010000
-					elif int_trig_r[3]	==	True:				 
-						npc.next = 0b011000
-					elif int_trig_r[4]	==	True:				 
-						npc.next = 0b100000
-					elif int_trig_r[5]	==	True:				 
-						npc.next = 0b101000
-					elif int_trig_r[6]	==	True:				 
-						npc.next = 0b110000
+					self.interrupt_vector_generate(int_trig_r, npc)
 			if inst  ==  0b01110011:		
 				npc.next = (concat(dph, dpl) + acc.signed())
 				j_skip.next = True

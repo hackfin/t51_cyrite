@@ -265,6 +265,7 @@ class T51(T51_Factory):
 			ram_wr = ram_wr,
 			ram_cycle = ram_cycle,
 			int_trig = _INTBV(int_trig_slv),
+			int_prio = None,
 			int_acc = int_acc,
 			sfr_rd_rmw = io_rd,
 			sfr_wr = io_wr,
