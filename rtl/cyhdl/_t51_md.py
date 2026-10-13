@@ -1,6 +1,6 @@
 # AI translated version
 #
-# Minor NI fixes required. Not fully verified.
+# Minor NI fixes required. Now likely complete.
 #
 #
 from cyhdl import *
@@ -40,12 +40,11 @@ def t51_md(
 	div_ov_next = Bool()
 	div_rdy_next = Bool()
 
-
 	mul_r = mul_q.clone()
 
-
-	@always(clk.posedge)
+	@always_comb
 	def multiply():
+		"No delay here. Might slow down f_max for pipeline"
 		mul_r.next = acc * b
 
 	ov_logic = [

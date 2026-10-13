@@ -16,21 +16,25 @@ def ssram(
 	a							: Signal,
 	din							: Signal,
 	dout						: Signal.Output,
-	
-	ADDRWIDTH					: vh.integer = 11,
-	DATAWIDTH					: vh.integer = 8): 
+	):
 	"behaviour"
 
+	ADDRWIDTH = a.size()
+	DATAWIDTH = din.size()
 
 	SIZE = 2 ** ADDRWIDTH
 	ram = MemArray([ intbv(j)[DATAWIDTH:] for j in range(SIZE)])
+
+	a1 = a.clone()
 	
 	@always(clk.posedge)
 	def worker():
-		if ce_n == False:
-			dout.next = ram[a]
-			if we_n == False:
-				ram[a].next = din
+		a1.next = a
+		if ce_n == False and we_n == False:
+			ram[a].next = din
 
+	async_read = [
+		dout.set(ram[a1])
+	]
 
 	return locals()

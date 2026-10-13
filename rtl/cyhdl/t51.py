@@ -3,9 +3,9 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 (c) 2016-2024 section5.ch
 """
 from cyhdl import *
+from myirl.kernel._types import Comment
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
 from . import cyhdl_work as work
-from myirl.kernel.components import Comment
 
 # Imports for 't51':
 
@@ -22,58 +22,35 @@ from cyrite.simulation import CoSimulator
 @container
 class Monitor:
 	"Monitor interface for simulation purposes"
-	_inputs = [ ]
-	_outputs = [ 'sfraddr', 're', 'we', 'data', 'pc' ]
+	_inputs = [ 'ext_irq', 'TRACE_ENABLE' ]
+	_outputs = [ 'sfraddr', 're', 'we', 'data', 'pc', 'flash_waddr',
+		'flash_we',
+		'r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7',
+	]
 	_other = []
 
 	def __init__(self, _S):
+		self.TRACE_ENABLE = _S(bool())
 		self.sfraddr = _S(intbv()[8:])
 		self.re = _S(bool())
+		self.ext_irq = _S(intbv()[2:])
 		self.we = _S(bool())
+		self.flash_waddr = _S(intbv()[19:])
+		self.flash_we = _S(bool())
 		self.data = _S(intbv()[8:])
 		self.pc = _S(intbv()[16:])
 
+		self.r0, \
+		self.r1, \
+		self.r2, \
+		self.r3, \
+		self.r4, \
+		self.r5, \
+		self.r6, \
+		self.r7  = [ _S(intbv()[8:]) for _ in range(8) ]
 
-class T51_Factory(cyrite_factory.Module):
-
-	_Monitor = Monitor
-
-	from .t51_pack import t51_alu as t51_alu_vhdl_bb
-
-	from .t51_alu import t51_alu as t51_alu_cyhdl_impl
-	from .t51_glue import t51_glue as t51_glue_cyhdl_impl
-
-	def __init__(self, name, target, VARIANT = 0):
-		# Here we switch between blackbox and cyhdl-version of the module
-		#
-		if issubclass(target, CoSimulator):
-			# Assume RTL output, pick the cyhdl implementation
-			self.t51_alu = self.t51_alu_cyhdl_impl
-		else:
-			# assume VHDL, use the blackbox config
-
-			if VARIANT == 1:
-				self.t51_alu = self.t51_alu_cyhdl_impl
-				self.t51_glue = self.t51_glue_cyhdl_impl
-			else:
-				# Known good
-				self.t51_alu = self.t51_alu_vhdl_bb
-				self.t51_glue = self.t51_glue_cyhdl_impl
-
-		modules = self._MODULES[:]
-		self.vhdlfiles = self._VHDLFILES[:]
-
-		if VARIANT == 0:
-			 modules.append("MD")
-
-
-		self.vhdlfiles += [
-			"../vhdl/T51_%s.vhd" % n for n in 
-				modules
-		]
-
-
-		super().__init__(name, target)
+class T51_Base(cyrite_factory.Module):
+	from .t51_alu import t51_alu
 
 	@hdlmacro
 	def interrupt_select(self, a, b):
@@ -104,6 +81,7 @@ differently than the irqio bit order would suggest."""
 		# walk = walk.Else(npc.set(0))
 
 		yield [ Comment("IRQ vector generation"), walk ]
+
 
 	@cyrite_factory.block_component
 	def t51(self,
@@ -247,15 +225,41 @@ differently than the irqio bit order would suggest."""
 
 		ram_addr_p = [ Byte() for _ in range(2) ]
 
-
 		output_wirings = [
 			ram_addr.wireup (concat(*reversed(ram_addr_p)))
 		]
 
 		if mon:
-			monitor_tap = [
-				mon.pc  .wireup (pc)
-			]
+			@always_comb
+			def mon_pc():
+				if ret_r == False:
+					mon.pc .next = pc
+				else:
+					mon.pc .next = opc
+
+
+			@always(clk.posedge)
+			def update_register():
+				"Nicer would be to use the @lut generator"
+				if mem_wr:
+					if int_addra_r == 0:
+						mon.r0.next = mem_din
+					elif int_addra_r == 1:
+						mon.r1.next = mem_din
+					elif int_addra_r == 2:
+						mon.r2.next = mem_din
+					elif int_addra_r == 3:
+						mon.r3.next = mem_din
+					elif int_addra_r == 4:
+						mon.r4.next = mem_din
+					elif int_addra_r == 5:
+						mon.r5.next = mem_din
+					elif int_addra_r == 6:
+						mon.r6.next = mem_din
+					elif int_addra_r == 7:
+						mon.r7.next = mem_din
+					else:
+						pass
 
 		@always(icall, fcycle, mcode, iready)
 		def proc_11472():	 
@@ -844,7 +848,6 @@ differently than the irqio bit order would suggest."""
 		dps_wirings = [
 			dps.wireup(dps_r if SECONDDPTR else False)
 		]
-
 
 		@always_seq(clk.posedge, rst_n)
 		def irq_handle():	
@@ -1572,3 +1575,5 @@ differently than the irqio bit order would suggest."""
 		]
 
 		return locals()
+
+

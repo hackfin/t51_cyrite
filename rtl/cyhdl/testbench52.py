@@ -4,13 +4,15 @@ Changes may be lost. Copy this file to a 'safe path' and remove this header.
 """
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
+from myirl.library.dontcare import Open
 
-from cpu8051.t8052 import T51, T51_VHDL
-from cpu8051.cyhdl_work.types import *
+from cpu8051.t51.rtl.cyhdl.t8052 import T51, T51_VHDL
+from cpu8051.t51.rtl.cyhdl.cyhdl_work.types import *
 
 # Register signal auxiliaries
 from library.soc import Reg, BF, RegisterSignal
 
+from cpu8051.t51.rtl.cyhdl.t51 import Monitor
 
 class T51BB(T51_VHDL):
 	"VHDL external code only wrapper"
@@ -22,8 +24,18 @@ class T51BB(T51_VHDL):
 	_VHDLFILES = [
 		"../vhdl/T51.vhd",
 		# "/tmp/t51.vhdl",
+		"../vhdl/T51_UART.vhd",
+		"../vhdl/T51_TC2.vhd",
+		"../vhdl/T51_TC01.vhd",
+		"../vhdl/T51_Port.vhd",
+		"../vhdl/T51_Glue.vhd",
+		"../vhdl/T51_MD.vhd",
+		"../vhdl/T51_RAM.vhd",
+		"../vhdl/T51_ALU.vhd",
+		"../vhdl/T51_Pack.vhd",
 		"../vhdl/T51.vhd",
-		"/tmp/rom52.vhdl",
+		"/tmp/rom52.vhdl", # Generated
+		# "/tmp/rom52.vhdl",
 		# "../vhdl/ROM52_BASIC.vhd",
 		"../vhdl/SSRAM.vhd",
 	]
@@ -78,7 +90,7 @@ class Lookup:
 class Rego600_Device:
 	"The pin mapping of the I/O ports of the Rego600 hardware"
 	# This is just a Port mockup. Use the one from the rego600 clone project
-	from sfr8051_8c552 import rmap_sfr
+	from cpu8051.sfr8051_nxp_80c552 import rmap_sfr_8xc552 as rmap_sfr
 
 	BIDIR, IN, OUT = range(3)
 
@@ -196,14 +208,18 @@ class TestSetup:
 		 # instance 't8052'
 		 #
 
-		p0 = IOPort()
-		p1 = IOPort()
-		p2 = IOPort()
-		p3 = IOPort()
-		p0_out = IOPort()
-		p1_out = IOPort()
-		p2_out = IOPort()
-		p3_out = IOPort()
+		P = Signal.Type(vh.std_logic_vector()[8:])
+
+		p0 = P()
+		p1 = P()
+		p2 = P()
+		p3 = P()
+		p4 = P()
+		p0_out = P()
+		p1_out = P()
+		p2_out = P()
+		p3_out = P()
+		p4_out = P()
 		xram_we_s = Signal(bool())
 		xram_stb_s = Signal(bool())
 		xram_cyc_s = Signal(bool())
@@ -219,6 +235,7 @@ class TestSetup:
 		txd = Signal(bool())
 		int0 = Signal(bool(False))
 
+		xram_en = Signal(bool())
 
 		rtc_clk = Signal(bool())
 		panel_scl = Bidirectional(self.Reg_p1, "I2C_SCL")
@@ -259,6 +276,10 @@ class TestSetup:
 			pc_o[1].collect(sr_4021_dat, sr_4094_dat, rtc_dat, sr_4094_clk)
 		]
 
+		analog_in = Signal(intbv()[10:])
+
+		mon = Monitor(self.Signal)
+
 		# Note: we moved to 't8052x'. Fix the interface.
 		u0 = self.t8052(
 			clk = clk,
@@ -267,10 +288,12 @@ class TestSetup:
 			p1_in = p1,
 			p2_in = p2,
 			p3_in = p3,
+			p4_in = p4,
 			p0_out = p0_out,
 			p1_out = p1_out,
 			p2_out = p2_out,
 			p3_out = p3_out,
+			p4_out = p4_out,
 			int0 = int0,
 			int1 = True,
 			t0 = True,
@@ -281,6 +304,7 @@ class TestSetup:
 			rxd_iso = rxd_isout,
 			rxd_o = rxd_out,
 			txd = txd,
+			ext_ram_en = xram_en,
 			xram_we_o = xram_we_s,
 			xram_stb_o = xram_stb_s,
 			xram_cyc_o = xram_cyc_s,
@@ -289,6 +313,9 @@ class TestSetup:
 			xram_adr_o = xram_adr_s,
 			xram_dat_i = xram_dati_s,
 			# Parameters:
+			# mon = mon,
+			# analog_data = analog_in,
+			# analog_sel = Open(3),
 			ROMADDRESSWIDTH = 16
 		)
 
@@ -361,13 +388,13 @@ class TestSetup:
 
 class Test8052_VHDLOnly(T51BB, TestSetup, Rego600_Device):
 	"The test bench for the 8051, Blackbox VHDL wrapped"
-
+	FIRMWARE = "../../../main.hex"
 	XRAM_wire = vh.std_logic_vector
 	USE_HEXFILE = False
 		
 class Test8052(T51_VHDL, TestSetup, Rego600_Device):
 	"The test bench for the 8051"
-
+	FIRMWARE = "/tmp/patched.bin"
 	XRAM_wire = intbv
 	USE_HEXFILE = False
 
@@ -375,6 +402,7 @@ class Test8052_portable(T51, TestSetup, Rego600_Device):
 	"The test bench for the 8051, cyhdl port setup"
 	XRAM_wire = intbv
 	USE_HEXFILE = True
+	FIRMWARE = "/tmp/patched.bin"
 
 from cyrite.simulation import ghdl
 from yosys.simulator import CXXRTL, CXXRTLVerilog
@@ -382,30 +410,41 @@ from yosys.simulator import CXXRTL, CXXRTLVerilog
 
 def run_ghdl(cycles, variant, wavefile):
 	if variant == 0:
-		m = Test8052_VHDLOnly("t51", ghdl.GHDL, VARIANT = 0)
+		m = Test8052_VHDLOnly("t51", ghdl.GHDL)
 	else:
 		m = Test8052("t51", ghdl.GHDL, VARIANT = variant)
 
 	tb = m.testbench52()
 
-	tb.extra_files += m.vhdlfiles
+	tb.extra_files += m._VHDLFILES
 
 	tb.run(cycles, debug = True, wavetrace = wavefile)
 
 
-def create_romfile(rom_binary):
+def create_romfile(romfile, HEXFILE = False):
 	addr = Signal(vh.std_logic_vector()[16:])
 	clk = ClkSignal()
 	data = Signal(vh.std_logic_vector()[8:])
 
-	with open(rom_binary, "rb") as f:
-		ROM_DATA = f.read()
-		f.close()
+	if HEXFILE:
+		import intelhex
+		romdata = intelhex.IntelHex(romfile)
+		print("PROGRAM: 0x%x .. 0x%x" % (romdata.minaddr(), romdata.maxaddr()))
+		ROM_DATA = bytes(
+			romdata.tobinarray(start = 0x0000, end = 0xffff, pad = 0xff)
+		)
+
+	else:
+		with open(romfile, "rb") as f:
+			ROM_DATA = f.read()
+			f.close()
 
 	from cyhdl_work.rom52 import rom52
 
-	inst = rom52(clk, addr, data, INITDATA = ROM_DATA, USE_HEX = True)
-	inst.elab(targets.Verilog, outpath = "/tmp/romtest/")
+	# inst = rom52(clk, addr, data, INITDATA = ROM_DATA, USE_HEX = True)
+	# inst.elab(targets.Verilog, outpath = "/tmp/")
+	inst = rom52(clk, addr, data, INITDATA = ROM_DATA, USE_HEX = False)
+	inst.elab(targets.VHDL, outpath = "/tmp/")
 
 def run_cxxrtl(cycles, variant, wavefile):
 	m = Test8052_portable("t51", CXXRTLVerilog)
@@ -413,7 +452,7 @@ def run_cxxrtl(cycles, variant, wavefile):
 	tb.run(cycles, debug = True, wavetrace = wavefile, recompile = False)
 
 if __name__ == "__main__":
-	cycles = 40000
+	cycles = 40000000
 
 	with open("t51_defines.py", "w") as f:
 		f.write(f"# T51 SFR register defines (auto-generated)\n")
@@ -422,10 +461,11 @@ if __name__ == "__main__":
 
 		f.close()
 
-	create_romfile("/tmp/patched.bin")
-	# run_ghdl(cycles, 0, "/tmp/t51_vhdl.vcd")
+	create_romfile("../../../main.hex", HEXFILE = True)
+	# create_romfile("/tmp/patched.bin")
+	run_ghdl(cycles, 0, "/tmp/t51_vhdl.vcd")
 	# run_ghdl(cycles, 1, "/tmp/t51.vcd")
-	run_cxxrtl(cycles * 20, None, "/tmp/t51-uut.vcd")
+	# run_cxxrtl(cycles * 20, None, "/tmp/t51-uut.vcd")
 	# Check the two waveforms:
 	# twinwave /tmp/t51_vhdl.vcd vhdl.sav + /tmp/t51.vcd t51.sav
 

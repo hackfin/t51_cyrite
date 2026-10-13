@@ -11,7 +11,8 @@ from . import cyhdl_work as work
 from .cyhdl_work.types import *
 
 # Finally, the core:
-from .t51 import T51_Factory, Monitor
+from .t51 import T51_Base, Monitor
+
 
 # Must take exactly the same type:
 _SLV = lambda x : vh.Cast(vh.std_logic_vector, x)
@@ -36,10 +37,10 @@ def pmux_generator(ctx, sigarray, selectors, data):
 	
 
 
-class T51(T51_Factory):
+class T51(T51_Base):
 	from .t51_adc import t51_adc
 	from .t51_port import t51_port
-	from .t51_glue import t51_glue, SFRSelect, SFRWrite
+	from .t51_glue import t51_gluex, SFRSelect, SFRWrite
 	from .t51_tc01 import t51_tc01
 	from .t51_tc2 import t51_tc2
 	from .t51_uart import t51_uart
@@ -145,6 +146,7 @@ class T51(T51_Factory):
 		r1 = Bool()
 		smod = Bool()
 		int_trig_slv = Signal(vh.std_logic_vector()[6+1:0])
+		int_trig = Signal(intbv()[6+1:0])
 		int_acc = Signal(intbv()[6+1:0])
 		ri = Bool()
 		ti = Bool()
@@ -264,7 +266,7 @@ class T51(T51_Factory):
 			ram_rd = ram_rd,
 			ram_wr = ram_wr,
 			ram_cycle = ram_cycle,
-			int_trig = _INTBV(int_trig_slv),
+			int_trig = int_trig,
 			int_prio = None,
 			int_acc = int_acc,
 			sfr_rd_rmw = io_rd,
@@ -308,8 +310,42 @@ class T51(T51_Factory):
 			r0 = r0,
 			r1 = r1,
 			smod = smod,
-			select = sfrsel,
-			write = sfrwr,
+			p0_sel = sfrsel.p0,
+			p1_sel = sfrsel.p1,
+			p2_sel = sfrsel.p2,
+			p3_sel = sfrsel.p3,
+			p4_sel = sfrsel.p4,
+			tmod_sel = sfrsel.tmod,
+			tl0_sel = sfrsel.tl0,
+			tl1_sel = sfrsel.tl1,
+			th0_sel = sfrsel.th0,
+			th1_sel = sfrsel.th1,
+			t2con_sel = sfrsel.t2con,
+			rcap2l_sel = sfrsel.rcap2l,
+			rcap2h_sel = sfrsel.rcap2h,
+			tl2_sel = sfrsel.tl2,
+			th2_sel = sfrsel.th2,
+			scon_sel = sfrsel.scon,
+			sbuf_sel = sfrsel.sbuf,
+			adc_sel = sfrsel.adch,
+			adcon_wr = sfrwr.adcon,
+			p0_wr = sfrwr.p0,
+			p1_wr = sfrwr.p1,
+			p2_wr = sfrwr.p2,
+			p3_wr = sfrwr.p3,
+			p4_wr = sfrwr.p4,
+			tmod_wr = sfrwr.tmod,
+			tl0_wr = sfrwr.tl0,
+			tl1_wr = sfrwr.tl1,
+			th0_wr = sfrwr.th0,
+			th1_wr = sfrwr.th1,
+			t2con_wr = sfrwr.t2con,
+			rcap2l_wr = sfrwr.rcap2l,
+			rcap2h_wr = sfrwr.rcap2h,
+			tl2_wr = sfrwr.tl2,
+			th2_wr = sfrwr.th2,
+			scon_wr = sfrwr.scon,
+			sbuf_wr = sfrwr.sbuf,
 			int_trig = int_trig_slv
 		)
 		

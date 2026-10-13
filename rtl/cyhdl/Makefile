@@ -1,5 +1,5 @@
 # Conversion makefile VHDL -> cyhdl
-include ~/src/pyrite/projects/masoc/convert.mk
+include ~/src/masoc/convert.mk
 
 CURDIR = $(shell pwd)
 

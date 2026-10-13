@@ -8,5 +8,6 @@ Nibble = Signal.Type(intbv()[4:])
 Addr16 = Signal.Type(intbv()[16:])
 Word = Signal.Type(intbv()[16:])
 
+from cyrite.auxiliaries.xhdl import vhdlaux as vh
 
 IOPort = Byte

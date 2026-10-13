@@ -64,7 +64,7 @@ class SFRWrite:
 		# self.adch		= Bool()
 
 @block
-def t51_glue(
+def t51_gluex(
 	# signals:
 	clk							: Signal.Type(vh.std_logic),
 	rst_n						: Signal.Type(vh.std_logic),
@@ -90,7 +90,7 @@ def t51_glue(
 	int_trig					: Signal.Type(vh.std_logic_vector, 6+1 - 0).Output,
 	
 	TRISTATE					: int = 1): 
-	"rtl"
+	"Note: Changed interface"
 
 	# Types
 
