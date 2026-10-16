@@ -9,7 +9,7 @@ from . import cyhdl_work as work
 # Imports for 't51_alu':
 
 from .cyhdl_work.types import *
-from ._t51_md import t51_md
+from .t51_md import t51_md
 
 _SLV = lambda x : vh.Cast(vh._SLV, x)
 _INTBV = lambda x : vh.Cast(work._intbv, x)
