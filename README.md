@@ -30,10 +30,11 @@ If not, you might either:
 
 At this point, there is no Jupyter Notebook release of this implementation.
 
-For compiling the supplied example code, you might want to install sdcc
+For compiling the supplied example code, you might want to install sdcc and
+objcopy:
 
 ```
-sudo apt-get install sdcc
+sudo apt-get install sdcc binutils
 ```
 
 ## Co-Simulation Introduction
