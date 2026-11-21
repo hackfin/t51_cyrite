@@ -1,0 +1,79 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Sat Nov 21 10:41:21 2026
+[*]
+[dumpfile] "/home/strubi/src/cpu8051/t51/t5sim.vcd"
+[dumpfile_mtime] "Sat Nov 21 10:40:39 2026"
+[dumpfile_size] 2813365
+[savefile] "/home/strubi/src/cpu8051/t51/sim.sav"
+[timestart] 0
+[size] 1503 929
+[pos] -1 -1
+*-12.912695 7916 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] soc_t8052NG_0.
+[treeopen] soc_t8052NG_0.mmr_perio_0.
+[treeopen] soc_t8052NG_0.t51_0.
+[sst_width] 239
+[signals_width] 464
+[sst_expanded] 1
+[sst_vpaned_height] 505
+@200
+-CPU
+@8022
+[color] 3
+soc_t8052NG_0.t51_0.pc[15:0]
+@28
+soc_t8052NG_0.mmr_perio_0.SER0_core.clk
+@200
+-IRQ
+@23
+[color] 2
+soc_t8052NG_0.t51_0.int_acc[10:0]
+@28
+soc_t8052NG_0.mmr_perio_0.IRQ_core.stat_in_TF1
+@22
+[color] 1
+soc_t8052NG_0.mmr_perio_0.IRQ_core.irqio_out_int_rq[10:0]
+@28
+soc_t8052NG_0.mmr_perio_0.IRQ_core.cfg_out_EA
+soc_t8052NG_0.mmr_perio_0.IRQ_core.cfg_out_ET1
+@200
+-UART
+@28
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.mmr_read_in_RI
+soc_t8052NG_0.mmr_perio_0.SER0_core.tx_state[1:0]
+soc_t8052NG_0.mmr_perio_0.SER0_core.uartio_out_wr
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.mmr_select_S0BUF_sel_w
+[color] 2
+soc_t8052NG_0.mmr_perio_0.SER0_core.sfr_read_in_TI
+@200
+-TIMER
+@22
+soc_t8052NG_0.mmr_perio_0.timer_0.cnt1[15:0]
+@28
+soc_t8052NG_0.mmr_perio_0.timer_0.of0
+soc_t8052NG_0.mmr_perio_0.timer_0.of1
+@22
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.mmr_write_out_TH0[7:0]
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.mmr_write_out_TH1[7:0]
+@28
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.mmr_write_out_TR1
+@200
+-PORT
+@28
+[color] 2
+soc_t8052NG_0.\p1_write_out_P1.0_UNUSED
+@200
+-SFR
+@22
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.addr[6:0]
+@28
+[color] 1
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.we
+@22
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.data_out[7:0]
+soc_t8052NG_0.mmr_perio_0.mmr_decode_0.data_in[7:0]
+@20000
+-
+[pattern_trace] 1
+[pattern_trace] 0

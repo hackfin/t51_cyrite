@@ -10,7 +10,7 @@ from cpu8051.t51.rtl.cyhdl.t8052 import T51, T51_VHDL
 from cpu8051.t51.rtl.cyhdl.cyhdl_work.types import *
 
 # Register signal auxiliaries
-from library.soc import Reg, BF, RegisterSignal
+from cyrite.library.soc import Reg, BF, RegisterSignal
 
 from cpu8051.t51.rtl.cyhdl.t51 import Monitor
 

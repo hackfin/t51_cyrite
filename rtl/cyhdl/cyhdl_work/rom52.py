@@ -9,7 +9,7 @@ def rom52(
 	clk : ( ClkSignal, type(None)),
 	a : Signal,
 	d : Signal.Output,
-	INITDATA : list, USE_HEX = False):
+	INITDATA : list, HEXFILE = None):
 
 	"""Simple ROM implementation. If clk is None, create an asynchronous ROM"""
 
@@ -20,9 +20,7 @@ def rom52(
 
 	# Write a hexfile with the init values:
 	
-	
-
-	rom = MemArray([ intbv(j)[n:] for j in INITDATA], init = not USE_HEX)
+	rom = MemArray([ intbv(j)[n:] for j in INITDATA], init = HEXFILE is None)
 
 	if isinstance(a, intbv):
 		i = a
@@ -36,8 +34,8 @@ def rom52(
 		i = u_index
 
 
-	if USE_HEX:
-		rom_init = HexROMGenerator("/tmp/rom52.hex", rom)
+	if not HEXFILE is None:
+		rom_init = HexROMGenerator(HEXFILE, rom)
 		rom_init.emit(INITDATA)
 
 	if clk is None:

@@ -39,8 +39,6 @@ def addsub(
 	ci = Signal(intbv()[2:])
 	ai, bi = [ Signal(intbv()[WIDTH+1:]) for _ in range(2) ]
 
-	print("DEBUG SIGNAL A", type(a), a.size())
-
 	_sub = sub if WIDTH == 1 else concat(*[ sub for _ in range(WIDTH) ])
 
 	logic = [

@@ -5,7 +5,6 @@ Modifications applied
 """
 from cyhdl import *
 from cyrite.auxiliaries.xhdl import vhdlaux as vh
-from myirl.library.array import ReadOnlyIndexer
 from . import cyhdl_work as work
 
 from .cyhdl_work.types import *
