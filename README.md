@@ -62,7 +62,7 @@ in this setup.
 The original VHDL source was translated into the **cyhdl** Python dialect which
 is syntactically close to MyHDL. This hierarchy has a similar structure as
 the corresponding VHDL project, with some modifications made to turn it into
-a class structure for more flexbility with respect to testing and
+a class structure for more flexibility with respect to testing and
 configureability. From this design, we emit Verilog for yosys in this case
 and compile it into an executable virtualized hardware model.
 

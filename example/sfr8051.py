@@ -144,7 +144,7 @@ for a particular 8051 derivative. Normally, you would inherit from it and
 add your own implementations."""
 
 	READ_ASYNC = True # Do not change this, it's core specific
-	_debug_ = True
+	# _debug_ = True
 
 	USE_TIMER_MOCKUP = True
 

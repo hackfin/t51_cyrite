@@ -31,7 +31,6 @@ macros"""
 		self.inta = Bool()
 		self.select_dat = Bool()
 		self.rst = ctx.ResetSignal(False, True)
-		print("DEBUG TARGET", type(ctx).__mro__)
 		self.If = ctx.If
 		# Simulation only:
 		if hasattr(ctx, "While"):
