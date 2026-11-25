@@ -27,8 +27,17 @@ to go with the scripts in `recipes`.
 If not, you might either:
 * Consult AI how to get Docker running on your platform
 * Use an online service where you can run docker containers
+* Use the Jupyter notebook binder service below
 
-At this point, there is no Jupyter Notebook release of this implementation.
+### JupyterLab notebook on mybinder.org
+
+You can run the container online as virtual machine with a Jupyter lab
+instance that allows you to run Python snippets interactively.
+In future, this might serve more as a tutorial than this README.
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/hackfin/t51_cyrite/cyhdlport?urlpath=lab/tree/index.ipynb)
+
+### Local (Linux host) execution
 
 For compiling the supplied example code, you might want to install sdcc and
 objcopy:
@@ -36,6 +45,30 @@ objcopy:
 ```
 sudo apt-get install sdcc binutils
 ```
+
+Then you can use the Make rules.
+
+1. Build firmware, hex file and verilog output: `make all init`
+2. Run the co-simulation: `make run`
+3. Clean up the build: `make clean`
+
+When you make changes to the firmware, you need to clean the build
+before running again, as a true hardware ROM is generated and hence
+recompilation is required. Ad-hoc loading into a pseudo-ROM is not supported
+in this setup.
+
+## Implementation details
+
+The original VHDL source was translated into the **cyhdl** Python dialect which
+is syntactically close to MyHDL. This hierarchy has a similar structure as
+the corresponding VHDL project, with some modifications made to turn it into
+a class structure for more flexbility with respect to testing and
+configureability. From this design, we emit Verilog for yosys in this case
+and compile it into an executable virtualized hardware model.
+
+More details about differences to MyHDL and coding guidelines are found in the
+[cyrite.howto](https://github.com/hackfin/cyrite.howto.git)
+
 
 ## Co-Simulation Introduction
 
@@ -87,9 +120,8 @@ If the docker container is not present, it is pulled from a repository
 first. This may take some time. If your machine is unable to run a docker
 container, you may as well play with it online from inside a browser.
 
-This may be elaborated at a later stage. For now, you might want to use
-one of the currently favored online docker services.
-
+This may be elaborated at a later stage. For now, you might have to do
+your own research which online docker playground fits best.
 
 ## System on Chip concept
 
@@ -189,7 +221,7 @@ read into yosys and compiled into a CXXRTL object:
 ```
 
 The result is a `*.vcd` file containing a large wave trace, plus a
-DLL in `runtime/`. Since the soure directory is mounted locally,
+DLL in `runtime/`. Since the source directory is mounted locally,
 the `*.so` file is persistent, hence not recompiled unless specified
 explitely. If you make changes to the actual core, you need to erase
 the `runtime/*.so`. However, changes to the test bench or co-routines
@@ -212,10 +244,10 @@ world that would work on a basic 8051. It should output a "Hello World"
 on the UART mockup example, plus toggle a P0 pin using the timer interrupt.
 
 After you have run the example, a `*.vcd` trace will be left for you
-in the current directory. You can view the trace using GTKWave:
+in the current output directory. You can view the trace using GTKWave:
 
 ```
-gtkwave t51sim.vcd example/hello.sav
+gtkwave output/t51sim.vcd example/hello.sav
 ```
 
 This will provide you with the means to inspect all synthesized signals

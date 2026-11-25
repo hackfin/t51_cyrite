@@ -324,7 +324,7 @@ class MyPlatform(T51_SoC, SPIFactory):
 
 		if isinstance(self.architecture, type) and issubclass(self.architecture, CoSimulator):
 			tb = self.testbench52()
-			tb.run(20000, debug = True, wavetrace = "t51sim.vcd", recompile = False)
+			tb.run(20000, debug = True, wavetrace = "output/t51sim.vcd", recompile = False)
 		else:
 			top = self.create_top()
 			tgt = self.architecture.target_class()

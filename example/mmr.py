@@ -713,7 +713,6 @@ class Generator(MMRGenerator):
 					print("Warning: RO value has default", name, rd._default)
 			elif rd.is_set(rd.WRITEONLY):
 				if not rd.has_bitfields():
-					print("DEBUG SET WRITEONLY DEFAULT", name, rdesc[0], rd._default)
 					mmr_sig = getattr(mmr.write, name)
 					d = get_default(rd)
 					if not d is None:

@@ -359,7 +359,7 @@ in the device specific sfr8051_<arch>.py module,
 
 		_mmr = mmr.MMRSignal('sfr_t', template = generator.register_map)
 
-		_mmr.dump_children()
+		# _mmr.dump_children()
 
 		_interface = { 'mmr' :_mmr }
 
