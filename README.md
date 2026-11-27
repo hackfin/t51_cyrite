@@ -162,11 +162,6 @@ configuration of various sorts. On the other hand, a `Factory` type class
 handles the platform architecture and possible I/O with externally
 co-simulated devices.
 
-Please note an important limitation: The SFR generator coming with this
-release implements volatile registers in a way not fully compatible with
-legacy 8051 peripherals. This means that a particular scheme must be followed
-for programming.
-
 ### Naming and IP cores
 
 SFRs break down to bit fields in the SFR description. A child signal is
@@ -297,13 +292,4 @@ generated hardware description for any safety relevant project.
 Moreover, the 0xa5 opcode does not allow looping in user defined handlers.
 This will not be addressed, as there is no intention to use 8051 for new
 projects, is it?
-
-Now, there is another tricky detail: The previous SFR generator had only
-limited support for VOLATILE type register bits, meaning it would only
-allow W1C (write-one-to-clear) or W0C behaviour. However, original
-8051 hardware would show different behaviour.
-
-This has a particular impact on program flow. See `PITFALL` in
-`example/firmware/main.c`. In this setup, we use custom setters, even
-though volatile bits are marked as `W0C`.
 
